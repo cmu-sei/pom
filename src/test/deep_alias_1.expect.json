@@ -1,0 +1,11 @@
+{
+  "function-satisfiability": {
+    "foo": "UNSATISFIABLE",
+    "main": "UNSATISFIABLE",
+    "malloc_or_die": "SATISFIABLE",
+    "print_ptr_chain": "SATISFIABLE",
+    "sub_min_ptr": "SATISFIABLE",
+    "triple_malloc": "SATISFIABLE",
+    "update_min_ptr": "SATISFIABLE"
+  }
+}

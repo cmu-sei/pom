@@ -1,0 +1,693 @@
+
+<legal>
+Pointer Ownership Model (POM) Source Code Release
+
+Copyright 2025 Carnegie Mellon University.
+
+NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+
+Licensed under a MIT (SEI)-style license, please see license.txt or
+contact permission@sei.cmu.edu for full terms.
+
+[DISTRIBUTION STATEMENT A] This material has been approved for public
+release and unlimited distribution.  Please see Copyright notice for
+non-US Government use and distribution.
+
+DM25-1262
+</legal>
+
+
+///////////////////////////////////////////////////////////////////////////////
+common.c
+
+  char *d2u_strncpy(char *dest, const char *src, size_t dest_size)
+
+    parameters:
+      dest                irresponsible, VALID
+      src                 irresponsible, VALID
+
+    locals:
+    return:               irresponsible, VALID
+
+  int d2u_fclose (FILE *fp, const char *filename, CFlag *ipFlag, const char *m, const char *progname)
+
+    parameters:
+      fp                      responsible,   GOOD->ZOMBIE
+      filename                irresponsible, VALID
+      ipFlag                  irresponsible, VALID
+      m                       irresponsible, VALID
+      progname                irresponsible, VALID
+
+    locals:
+    return:
+
+  void d2u_PrintLastError(const char *progname)
+
+    parameters:
+      progname                irresponsible, VALID
+
+    locals:
+      lpMsgBuf                responsible
+
+    return:
+
+  int d2u_WideCharToMultiByte(UINT CodePage,
+                              DWORD dwFlags,
+                              LPCWSTR lpWideCharStr,
+                              int cchWideChar,
+                              LPSTR lpMultiByteStr,
+                              int cbMultiByte,
+                              LPCSTR lpDefaultChar,
+                              LPBOOL lpUsedDefaultChar)
+
+    parameters:
+      lpWideCharStr           irresponsible, VALID
+      lpMultiByteStr          irresponsible, VALID|NULL
+      lpDefaultChar           irresponsible, VALID|NULL
+(based on https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-widechartomultibyte)
+    locals:
+    return:
+
+  int d2u_MultiByteToWideChar(UINT CodePage,
+                              DWORD dwFlags,
+                              LPCSTR lpMultiByteStr,
+                              int cbMultiByte,
+                              LPWSTR lpWideCharStr,
+                              int cchWideChar)
+
+    parameters:
+      lpMultiByteStr          irresponsible, VALID
+      lpWideCharStr           irresponsible, VALID|NULL
+(based on https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-multibytetowidechar)
+    locals:
+    return:
+
+  void d2u_utf8_fprintf( FILE *stream, const char* format, ... )
+
+    parameters:
+      stream                 irresponsible, VALID
+      format                 irresponsible, VALID
+    locals:
+    return:
+
+  void d2u_ansi_fprintf( FILE *stream, const char* format, ... )
+
+    parameters:
+      stream                 irresponsible, VALID
+      format                 irresponsible, VALID
+    locals:
+    return:
+
+  int d2u_rename(const char *oldname, const char *newname)
+
+    parameters:
+      oldname                irresponsible, VALID
+      newname                irresponsible, VALID
+    locals:
+    return:
+
+  int d2u_unlink(const char *filename)
+
+    parameters:
+      filename              irresponsible, VALID
+    locals:
+    return:
+
+  int symbolic_link(const char *path)
+
+    parameters:
+      path                 irresponsible, VALID
+    locals:
+    return:
+
+  int regfile(char *path, int allowSymlinks, CFlag *ipFlag, const char *progname)
+
+    parameters:
+      path                 irresponsible, VALID
+      ipFlag               irresponsible, VALID
+      progname             irresponsible, VALID
+    locals:
+    return:
+
+  int regfile_target(char *path, CFlag *ipFlag, const char *progname)
+
+    parameters:
+      path                 irresponsible, VALID
+      ipFlag               irresponsible, VALID
+      progname             irresponsible, VALID
+    locals:
+    return:
+
+  glob_warg                : 505
+
+    parameters:
+         wargv               irresponsible, VALID (CommandLineToArgvW allocates prior to function call)
+         argv                producer
+         *argv               responsible, ZOMBIE->GOOD
+         **argv              responsible, ->GOOD
+         ipFlag              irresponsible, VALID
+         progName            irresponsible, VALID
+
+    locals:
+      509     warg              = points to wargv[i]
+                                  points to a slice of allocated memory
+                                  does not own memory.
+                                  the memory it points to isn't explicitly owned within function.
+                                  [irresponsible]
+
+      510     path              = _wcsdup calls malloc.
+                                  owns pointer.
+                                  [responsible:579]
+
+      511     path_and_filename = calls malloc.
+                                  owns pointer.
+                                  [responsible:567]
+(Note: these line numbers seem to be off by 2, ptr is declared on line 514 in my common.c ~DS)
+      512     ptr               = points to a character.
+                                  does not own memory.
+                                  points to a slice of memory owned by path.
+                                  [irresponsible]
+
+      513     arg               = calls malloc
+                                  [responsible:525]
+
+      514     argv_new          = calls malloc
+                                  [responsible:521]
+
+      515     errstr            = pointer given by stdlib (strerror)
+                                  [irresponsible]
+
+      519     hFind             = file handle gives ownership to handle.
+                                  [responsible:574]
+
+      550     new_argv_new      = calls realloc
+                                  [responsible:568]
+
+
+  void PrintBSDLicense(void)
+
+    parameters:
+    locals:
+    return:
+
+  int is_dos2unix(const char *progname)
+
+    parameters:
+      progname                irresponsible, VALID
+    locals:
+    return:
+
+  void PrintUsage(const char *progname)
+
+      parameters:
+        progname                irresponsible, VALID
+      locals:
+      return:
+
+  void PrintVersion(const char *progname, const char *localedir)
+
+      parameters:
+        progname                irresponsible, VALID
+        localdir                irresponsible, VALID
+      locals:
+      return:
+
+  FILE* OpenInFile(char *ipFN)
+
+      parameters:
+        ipFN                  irresponsible, VALID
+
+      locals:
+      return:
+        hands off ownership of file handle    responsible,  GOOD|NULL
+
+  FILE* OpenOutFile(char *opFN)
+
+      parameters:
+        opFN                  irresponsible, VALID
+
+      locals:
+      return:
+        hands off ownership of file handle    responsible,  GOOD|NULL
+
+  FILE* OpenOutFiled(int fd)
+
+      parameters:
+      locals:
+      return:
+        hands off ownership of file handle    responsible,  GOOD|NULL
+
+  char *dirname(char *path)
+
+      parameters:
+        path                irresponsible, VALID
+
+      locals:
+        ptr                 irresponsible
+
+      return:
+        path                irresponsible, VALID
+
+  char *basename(char *path)
+
+      parameters:
+        path               irresponsible, VALID
+
+      locals:
+        ptr                irresponsible
+
+      return:
+        path               irresponsible, VALID
+
+  char *d2u_mktemp(char *template)
+
+      parameters:
+        template            irresponsible, VALID
+      locals:
+        cpy1                responsible
+        cpy2                responsible
+        dn                  irresponsible
+        bn                  irresponsible
+        ptr                 irresponsible
+        fname_str           responsible
+      return:
+        temporary file name responsible, GOOD|NULL
+
+NOTE: this function is preprocessed out in the build in the Redemption container, so it need not be included here.
+
+While dirname() and basename() are defined in common.c, they are ifdef'd out by the Redemption container.
+
+POSIX says: The dirname() function may modify the string pointed to by path, and may return a pointer to static storage that may then be overwritten by a subsequent call to dirname().
+and says the same wrt basename().  So assume dirname() and basename() take & return irresponsible pointers, just like their sample implementations in common.c
+
+Note that strdup() takes a valid irresponsible pointer, and returns a responsible pointer that is GOOD or NULL.
+
+  FILE* MakeTempFileFrom(const char *OutFN, char **fname_ret)
+
+      parameters:
+        OutFN               irresponsible, VALID
+        fname_ret           producer
+        *fname_ret          responsible, ZOMBIE|NULL->GOOD|NULL
+      locals:
+        cpy                 responsible
+        dir                 irresponsible (cpy & dir are the same)
+        fname_str           responsible (hands off ownership to fname_ret array)
+        fp                  responsible
+      return:
+        hands off file handle  responsible, GOOD|NULL
+
+This code violates POM by assigning fname_str's value to fname_ret, which makes fname_str a ZOMBIE. Then they use fname_str onlines 993 and 999. This code could comply with POM by s/fname_str/fname_ret/; in lines 993 and 999.
+
+  int ResolveSymbolicLink(char *lFN, char **rFN, CFlag *ipFlag, const char *progname)
+
+      parameters:
+        lFN                irresponsible, VALID
+        *rFN               producer
+        *rFN               responsible    ZOMBIE|NULL->GOOD|unchanged&error (return -1)
+        ipFlag             irresponsible, VALID
+        progname           irresponsible, VALID
+      locals:
+        errstr             irresponsible
+        targetFN           responsible
+      return:
+        n/a
+
+If lFN is a link, and realpath() or canonicalize_file_name() fail, they both return NULL, but the null check does not overrite *rFN. So if this function returns -1 as error, it leaves *rFN unchanged.
+
+If lFN is a link, then canonicalize_file_name() returns a responsible pointer. (So does realpath().) If GOOD, it gets assigned to *rFN and then goes out of scope. Which means that *rFN must be responsible.
+Otherwise lFN is not a link, it gets directly assigned to *rFN.  This would mean either that *rFN is irresponsible (which contradicts lFN being a link) or that *rFN is responsible and lFN becomes a ZOMBIE.
+That is, lFN becomes a ZOMBIE only if it is not a symbolic link.
+So this function violates POM!
+
+A simple fix would be for *rFN to be responsible (ZOMBIE|NULL->GOOD) and receive a clone of lFN, perhaps by using strdup(lFN) on line 1100 and 1102. (This would make lFN irresponsible).  This function is invoked only by ConvertNewFile(), which treats lFN as irresponsible and *rFN as responsible.
+
+  FILE *read_bom (FILE *f, int *bomtype)
+
+      parameters:
+        f                  irresponsible, VALID|NULL
+        bomtype            irresponsible, VALID
+      locals:
+      return:
+        file handle (f)   irresponsible (VALID|NULL)
+
+  FILE *write_bom (FILE *f, CFlag *ipFlag, const char *progname)
+
+      parameters:
+        f                 irresponsible, VALID
+        ipFlag            irresponsible, VALID
+        progname          irresponsible, VALID
+      locals:
+      return:
+        file handle (f)  irresponsible, VALID
+
+  void print_bom (const int bomtype, const char *filename, const char *progname)
+
+      parameters:
+        filename         irresponsible, VALID
+        progname         irresponsible, VALID
+      locals:
+      return:
+
+  void print_bom_info (const int bomtype)
+
+      parameters:
+      locals:
+      return:
+
+  int check_unicode_info(FILE *InF,
+                         CFlag *ipFlag,
+                         const char *progname,
+                         int *bomtype_orig)
+
+      parameters:
+        InF              irresponsible, VALID
+        ipFlag           irresponsible, VALID
+        progname         irresponsible, VALID
+      locals:
+      return:
+
+  int check_unicode(FILE *InF,
+                    FILE *TempF,
+                    CFlag *ipFlag,
+                    const char *ipInFN,
+                    const char *progname)
+
+      parameters:
+        InF              irresponsible, VALID
+        TempF            irresponsible, VALID
+        ipFlag           irresponsible, VALID
+        progname         irresponsible, VALID
+      locals:
+      return:
+
+  int ConvertNewFile(char *ipInFN,
+                     char *ipOutFN,
+                     CFlag *ipFlag,
+                     const char *progname,
+                     int (*Convert)(FILE*, FILE*, CFlag *, const char *))
+
+      parameters:
+        ipInFN          irresponsible, VALID
+        ipOutFN         irresponsible, VALID
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+        Convert         irresponsible, VALID (fn)
+        ConvertW        irresponsible, VALID (fn)
+      locals:
+        InF             responsible
+        TempF           responsible
+        TempPath        responsible
+        errstr          irresponsible
+        TargetFN        responsible
+
+      return:
+
+TargetFN should be responsible, But line 1513 violates TargetFN being responsible, by giving it ipOutFN (which is irresponsible).
+This could be fixed by:
+comment out line 1513 (TargetFN must remain a ZOMBIE),
+add:
+    else {
+      TargetFN = strdup(ipOutFN);
+    }
+to line 1526
+and make the freeing of TargetFN unconditional (remove the condition)
+
+Line 1515 says:
+    ResolveSymlinkResult = 0; /* indicates that TargetFN need not be freed */
+and further analysis shows that the comment is correct: the ResolveSymlinkResult flag does correctly indicate whether TargetFN should be freed.
+So this code is currently memory-safe, but using a variable to keep track of whether TargetFN should be freed violates POM.
+
+  int ConvertToStdout(char *ipInFN,
+                      CFlag *ipFlag,
+                      const char *progname,
+                      int (*Convert)(FILE*, FILE*, CFlag *, const char *))
+
+      parameters:
+        ipInFN          irresponsible, VALID
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+        Convert         irresponsible, VALID (fn)
+        ConvertW        irresponsible, VALID (fn)
+      locals:
+        InF             responsible
+        errstr          irresponsible
+      return:
+
+  int ConvertStdio(CFlag *ipFlag,
+                   const char *progname,
+                   int (*Convert)(FILE*, FILE*, CFlag *, const char *))
+
+      parameters:
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+        Convert         irresponsible, VALID (fn)
+        ConvertW        irresponsible, VALID (fn)
+      locals:
+      return:
+
+  void print_messages_stdio(const CFlag *pFlag, const char *progname)
+
+      parameters:
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+      return:
+
+  void print_format(const CFlag *pFlag,
+                    char *informat,
+                    char *outformat,
+                    size_t lin,
+                    size_t lout)
+
+      parameters:
+        pFlag          irresponsible, VALID
+        informat       irresponsible, VALID
+        outformat      irresponsible, VALID
+      locals:
+      return:
+
+  void print_messages(const CFlag *pFlag,
+                      const char *infile,
+                      const char *outfile,
+                      const char *progname,
+                      const int conversion_error)
+
+      parameters:
+        pFlag          irresponsible, VALID
+        infile         irresponsible, VALID
+        outfile        irresponsible, VALID
+        progname       irresponsible, VALID
+      locals:
+      return:
+
+  void print_messages_info(const CFlag *pFlag,
+                           const char *infile,
+                           const char *progname)
+
+      parameters:
+        pFlag          irresponsible, VALID
+        infile         irresponsible, VALID
+        progname       irresponsible, VALID
+      locals:
+      return:
+
+
+  void printInfo(CFlag *ipFlag,
+                 const char *filename,
+                 int bomtype,
+                 unsigned int lb_dos,
+                 unsigned int lb_unix,
+                 unsigned int lb_mac,
+                 int last_eol)
+
+      parameters:
+        ipFlag         irresponsible, VALID
+        filename       irresponsible, VALID
+      locals:
+      return:
+
+  void FileInfo(FILE* ipInF,
+                CFlag *ipFlag,
+                const char *filename,
+                int bomtype,
+                const char *progname)
+
+      parameters:
+        ipInF          irresponsible, VALID
+        ipFlag         irresponsible, VALID
+        filename       irresponsible, VALID
+        progname       irresponsible, VALID
+      locals:
+      return:
+
+  int GetFileInfo(char *ipInFN, CFlag *ipFlag, const char *progname)
+
+      parameters:
+        ipInFN         irresponsible, VALID
+        ipFlag         irresponsible, VALID
+        progname       irresponsible, VALID
+      locals:
+        InF            responsible
+        errstr         irresponsible
+      return:
+
+  int GetFileInfoStdio(CFlag *ipFlag, const char *progname)
+
+      parameters:
+        ipFlag         irresponsible, VALID
+        progname       irresponsible, VALID
+      locals:
+      return:
+
+
+  void get_info_options(char *option, CFlag *pFlag, const char *progname)
+
+      parameters:
+        option         irresponsible, VALID
+        ipFlag         irresponsible, VALID
+        progname       irresponsible, VALID
+      locals:
+        ptr            irresponsible
+      return:
+
+  int parse_options(int argc,
+                    char *argv[],
+                    CFlag *pFlag,
+                    const char *localedir,
+                    const char *progname,
+                    void (*PrintLicense)(void),
+                    int (*Convert)(FILE*, FILE*, CFlag *, const char *))
+
+      parameters:
+        argv            irresponsible, VALID
+        *argv           irresponsible, VALID
+        pFlag           irresponsible, VALID
+        localedir       irresponsible, VALID
+        progname        irresponsible, VALID
+        PrintLicense    irresponsible, VALID (fn)
+        Convert         irresponsible, VALID (fn)
+        ConvertW        irresponsible, VALID (fn)
+      locals:
+        ptr             irresponsible
+      return:
+
+  void d2u_getc_error(CFlag *ipFlag, const char *progname)
+
+      parameters:
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+        errstr          irresponsible
+      return:
+
+  void d2u_putc_error(CFlag *ipFlag, const char *progname)
+
+      parameters:
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+        errstr          irresponsible
+      return:
+
+  void d2u_putwc_error(CFlag *ipFlag, const char *progname)
+
+      parameters:
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+      return:
+
+  wint_t d2u_getwc(FILE *f, int bomtype)
+
+      parameters:
+        f               irresponsible, VALID
+      locals:
+      return:
+
+   wint_t d2u_ungetwc(wint_t wc, FILE *f, int bomtype)
+
+      parameters:
+        f               irresponsible, VALID
+      locals:
+      return:
+
+wint_t d2u_putwc(wint_t wc, FILE *f, CFlag *ipFlag, const char *progname)
+
+      parameters:
+        f               irresponsible, VALID
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+      return:
+
+///////////////////////////////////////////////////////////////////////////////
+dos2unix.c
+
+The unix2dos.c file appears to be the same as dos2unix.c. main() is the same wrt POM and the other functions all use irresponsible pointers.
+
+The StripDeliminterW and ConvertDosToUnixW are identical
+
+  int StripDelimiter(FILE* ipInF,
+                     FILE* ipOutF,
+                     CFlag *ipFlag,
+                     int CurChar,
+                     unsigned int *converted,
+                     const char *progname)
+
+      parameters:
+        ipInF           irresponsible, VALID
+        ipOutF          irresponsible, VALID
+        ipFlag          irresponsible, VALID
+        converted       irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+      return:
+
+  int ConvertDosToUnix(FILE* ipInF, FILE* ipOutF, CFlag *ipFlag, const char *progname)
+
+      parameters:
+        ipInF           irresponsible, VALID
+        ipOutF          irresponsible, VALID
+        ipFlag          irresponsible, VALID
+        progname        irresponsible, VALID
+      locals:
+        ConvTable       irresponsible
+      return:
+
+  int main (int argc, char *argv[])
+
+      parameters:
+        argc          irresponsible, VALID
+        argv          irresponsible, VALID
+        *argv         irresponsible, VALID
+      locals:
+        pFlag         responsible
+        ptr           irresponsible
+        argv_new      responsible
+        *argv_new     responsible
+        argv_glob     responsible
+        *argv_glob    responsible
+        **argv_glob   responsible
+        localedir     irresponsible (stack)
+        progname      irresponsible
+
+      return:
+
+argv_new is responsible in the D2U_UNIFILE configuration, but never freed (memory leak!)
+argv_new is irresponsible in the other configuration.
+
+///////////////////////////////////////////////////////////////////////////////
+querycp.c
+
+  unsigned short query_con_codepage(void)
+
+    parameters:
+    locals:
+    return:

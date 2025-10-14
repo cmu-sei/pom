@@ -1,0 +1,79 @@
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+# YAML schema for POM models, compatible with Yamale
+# To use this, run: yamale -s pom.yamale.yml <your pom file>
+# Or, use the built-in checker command: pom-lint <your pom file>
+
+Functions: map(include('function'), key=str(), min=0, required=True)
+Structs: map(include('struct'), key=str(), min=0, required=False)
+
+---
+function:
+  signature: str(required=False)
+  args: map(include('pom-element'), key=str(), min=0, required=False)
+  locals: map(include('pom-element'), key=str(), min=0, required=False)
+  return: include('recursive-pom-element', required=False)
+
+struct: map(include('pom-element'), key=str(), min=0, required=False)
+
+
+pom-element:
+  resp: include('responsibility', required=False)
+  type: include('pointer-type', required=False)
+  struct: str(required=False)
+  start: include('pointer-state', required=False, min=1)
+  end: include('pointer-state', required=False, min=1)
+  destructor: include('destructor', required=False)
+  arg_idx: include('arg_idx', required=False)
+
+  # conditional properties
+  min: any(int(), str(), required=False)
+  max: any(int(), str(), required=False)
+  lifetime: list(str(), required=False)
+  mutable: bool(required=False)
+
+  referent: any(include('recursive-pom-element'), include('responsibility'), str(), required=False)
+
+recursive-pom-element:
+  name: str(required=False)
+  resp: include('responsibility', required=False)
+  type: include('pointer-type', required=False)
+  struct: str( required=False)
+  start: include('pointer-state', required=False, min=1)
+  end: include('pointer-state', required=False, min=1)
+  destructor: include('destructor', required=False)
+
+  # conditional properties
+  min: any(int(), str(), required=False)
+  max: any(int(), str(), required=False)
+  lifetime: list(str(), required=False)
+  mutable: bool(required=False)
+
+  referent: any(include('recursive-pom-element'), include('responsibility'), str(), required=False)
+
+responsibility: enum('responsible', 'irresponsible', 'out-of-scope', 'diligent', 'producer')
+pointer-state: list(enum('VALID', 'INVALID', 'GOOD', 'ZOMBIE', 'NUL'), min=1)
+pointer-type: enum('pointer', 'array', 'struct', 'union')
+destructor: regex('^(free|fclose|.*)$')
+arg_idx: int()

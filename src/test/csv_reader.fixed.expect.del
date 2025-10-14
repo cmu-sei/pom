@@ -1,0 +1,9 @@
+{
+  "function-satisfiability": {
+    "free_row": "SATISFIABLE",
+    "free_table": "SATISFIABLE",
+    "main": "SATISFIABLE",
+    "parse_csv_file": "SATISFIABLE",
+    "parse_csv_row": "SATISFIABLE"
+  }
+}

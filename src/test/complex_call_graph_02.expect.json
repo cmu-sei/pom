@@ -1,0 +1,15 @@
+{
+  "function-satisfiability": {
+    "comprehensive_analysis": "SATISFIABLE",
+    "create_value": "SATISFIABLE",
+    "display_result": "SATISFIABLE",
+    "double_value": "SATISFIABLE",
+    "factorial_calc": "SATISFIABLE",
+    "is_even_check": "SATISFIABLE",
+    "is_odd_check": "SATISFIABLE",
+    "main": "SATISFIABLE",
+    "print_value": "SATISFIABLE",
+    "process_factorial": "SATISFIABLE",
+    "process_parity": "SATISFIABLE"
+  }
+}

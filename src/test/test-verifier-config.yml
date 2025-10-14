@@ -1,0 +1,47 @@
+# Configuration file for testing the POM verifier
+
+# The format for a test case is as follows:
+# <test-name>:
+#  pom: <path to pom file for C source file>
+#  valid: <path to output file to compare validation output against>
+# the test name must be unique, have no spaces, and follow the Python naming convention (lowercase with underscores / snakecase)
+# when the test suite is run, it will search for the C source file that has the same basename as the valid property
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+
+tests:
+  fn:
+    pom: fn.pom.yml
+    valid: fn.verifier.json
+    expect: True
+  fn_missing_funcs:
+    pom: fn-missing-funcs.pom.yml
+    valid: fn.verifier.json
+    expect: False
+  fn_missing_args:
+    pom: fn-nested-missing-args.pom.yml
+    valid: fn-nested.verifier.json
+    expect: False

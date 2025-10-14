@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=../../pom.lsp.yml
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+# resp_path_alias_1.c
+Functions:
+  foo_0:
+    args:
+      q:
+        resp: responsible
+        referent:
+          type: pointer
+          resp: irresponsible
+          mutable: true
+    locals: {}
+    return: {}
+
+  foo_1:
+    args:
+      q:
+        resp: producer
+        referent:
+          type: pointer
+          resp: irresponsible
+          mutable: true
+    locals: {}
+    return: {}
+
+  cleanup:
+    args:
+      ppX:
+        resp: responsible
+        referent:
+          type: pointer
+          resp: responsible
+    locals: {}
+    return: {}
+
+  main:
+    args: {}
+    locals:
+      ppX:
+        resp: responsible
+        referent:
+          type: pointer
+          resp: responsible
+      p2:
+        resp: responsible
+        referent:
+          type: pointer
+          mutable: true
+          resp: irresponsible
+      p3:
+        resp: irresponsible
+        mutable: true
+        referent:
+          type: pointer
+          resp: diligent
+    return: {}
+    # These lines when defined violate POM in responsibility type mismatch:
+    # Line 30: p3 & *p3
+    # Line 32: p2. Also screws up line 38
+    # Line 34 p3 not responsible C-path. (p3 irresp)

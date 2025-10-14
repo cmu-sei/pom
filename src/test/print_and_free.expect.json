@@ -1,0 +1,6 @@
+{
+  "function-satisfiability": {
+    "main": "UNSATISFIABLE",
+    "print_and_free": "SATISFIABLE"
+  }
+}

@@ -1,0 +1,113 @@
+# Currently lists info about how to work with each external codebase
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+
+codebases: # All the codebases that we list
+
+  dos2unix:  # 4444 LoC
+    url: "https://sourceforge.net/projects/dos2unix/files/dos2unix/7.5.2/dos2unix-7.5.2.tar.gz"
+    notes: "Download using wget"
+    stable_version: "7.5.2"
+    license: "FreeBSD style"
+
+    dependencies:
+      apt-get: ["po4a"]  # for running tests
+
+    build:
+      default: "make DOS2UNIX_AUTHOR=nobody dos2unix"
+      clang: "make DOS2UNIX_AUTHOR=nobody CC=clang dos2unix"
+    test:
+      setup: "make DOS2UNIX_AUTHOR=nobody"
+      cmd: "make DOS2UNIX_AUTHOR=nobody test"
+    clang-tidy:
+      cmd: ["bear -- make DOS2UNIX_AUTHOR=nobody CC=clang dos2unix",
+            "clang-tidy -checks='*' querycp.c  dos2unix.c  common.c"]
+            # >9000 warnings generated w clang 15
+    scan-build:
+      cmd: "scan-build -plist -o clang.out  make DOS2UNIX_AUTHOR=nobody CC=clang dos2unix"
+
+    clean: "make clean"
+    binary: "dos2unix"
+
+
+  git:
+    git: "https://github.com/git/git.git"
+    stable_version: "v2.49.0"
+    license: "GPLv2"
+    suite: "free"
+
+    dependencies:
+      apt-get: ["libcurl4-openssl-dev", "libssl-dev", "zlib1g-dev", "tcl", "gettext"]
+
+    build:
+      configure: "make configure; ./configure"
+      configure-clang: "make configure; env CC=clang ./configure"
+      default: "make PAGER_ENV=dummy git"
+    test:
+      # Note that a test fails quickly if run on a shared
+      # volume. (prob due to MacOS filesystem). The test only works if
+      # git source lives on a non-shared volume.
+      setup: "cd .. ; cp -r git /home ; pushd /home/git"
+
+      # On my platform, this takes 15 min & produces ~26000 lines of output.
+      cmd: "make test"
+      clean: "popd ; rm -rf /home/git"
+    clang-tidy:
+      cmd: ["bear -- make PAGER_ENV=dummy CC=clang git",
+            "grep --color=none '\"file\":' compile_commands.json | sed 's/\"file\"://;  s/\",/\"/;' | sort -u  | xargs clang-tidy -checks='*'"]
+
+    clean: "make clean"
+    binary: "git"
+
+
+  wrk:   # 4703 LoC
+    suite: "free"
+    git: "https://github.com/wg/wrk"
+    stable_version: "4.2.0"
+    license: "Modified Apache License 2.0"
+
+    dependencies:
+      apt-get: ["luajit", "libluajit-5.1-dev", "libssl-dev"]
+
+    build:
+      default: 'make WITH_OPENSSL=/usr WITH_LUAJIT=/usr CFLAGS="-I/usr/include/luajit-2.1 "'
+
+    clean: "make clean"
+    binary: "wrk"
+
+  Tinyhttpd:  # 8209 LoC
+    git: "https://github.com/larryhe/tinyhttpd.git"
+    commit: "69008d1"  # latest, no Git tags or official releases,
+    # Unoffically version 2.28 of 04Feb2018
+    license: "None"
+
+    build:
+      configure: "./configure"
+      default: "make"
+      build-clang: "make CC=clang"
+
+    clean: "make clean"
+    binary: "./thttpd"

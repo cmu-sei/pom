@@ -1,0 +1,103 @@
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+# YAML schema for POM models, compatible with Language Server Protocol (LSP)
+
+$schema: "http://json-schema.org/draft-07/schema#"
+type: object
+properties:
+  Functions: # START: Functions property
+  type: object
+  additionalProperties: false
+  patternProperties:
+    ".*": # Matches any function name
+      type: object
+      properties:
+        args: # START: args property
+          type: array
+          minItems: 0 # Allow empty args array
+          items:
+            required: ["name", "resp"] # Require name and resp for validation
+            $ref: "#/definitions/pom-element" # Reference to pom-element definition
+        locals: # START: locals property
+          type: array
+          minItems: 0 # Allow empty locals array
+          items:
+            required: ["name", "resp"] # Require name and resp for validation
+            $ref: "#/definitions/pom-element" # Reference to pom-element definition
+        return: # START: return property
+          type: object
+          $ref: "#/definitions/pom-element" # Reference to pom-element definition
+definitions:
+  responsibility: # Responsibility property
+    type: string
+    enum: ["responsible", "irresponsible", "out-of-scope", "diligent", "producer"]
+  pointer-state: # Pointer state property
+    type: array
+    minItems: 1
+    items:
+      type: string
+      enum: [GOOD, ZOMBIE, NUL, VALID, INVALID]
+  pointer-type: # Pointer type property
+    type: string
+    enum: ["pointer", "array", "struct", "union"]
+  destructor: # Destructor property
+    type: string
+    pattern: "^(free|fclose|.*)$"
+  pom-element: # Recursive definition for the pom-element property
+    oneOf:
+      - $ref: "#/definitions/responsibility"
+      - type: object
+        properties:
+          name:
+            type: string
+          resp:
+            $ref: "#/definitions/responsibility" # Responsibility property
+          start:
+            $ref: "#/definitions/pointer-state" # Pointer state
+          end:
+            $ref: "#/definitions/pointer-state" # Pointer state
+          destructor:
+            $ref: "#/definitions/destructor" # Destructor property
+          type:
+            $ref: "#/definitions/pointer-type" # Pointer type
+          # Conditional properties
+          min:
+            anyOf:
+              - type: integer
+              - type: string
+          max:
+            anyOf:
+              - type: integer
+              - type: string
+          lifetime:
+            anyOf:
+              - type: integer
+              - type: string
+          mutable:
+            - type: string
+          # Referent can be recursive or a responsibility string
+          referent:
+            oneOf:
+              - $ref: "#/definitions/pom-element"
+              - $ref: "#/definitions/responsibility"

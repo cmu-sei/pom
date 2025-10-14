@@ -1,0 +1,6 @@
+{
+  "function-satisfiability": {
+    "foo": "UNSATISFIABLE",
+    "main": "SATISFIABLE"
+  }
+}

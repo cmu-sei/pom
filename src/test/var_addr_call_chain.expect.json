@@ -1,0 +1,7 @@
+{
+  "function-satisfiability": {
+    "bar": "SATISFIABLE",
+    "foo": "SATISFIABLE",
+    "main": "SATISFIABLE"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "function-satisfiability": {
+    "longest": "SATISFIABLE",
+    "main": "SATISFIABLE",
+    "maybe_get_dangling_local": "UNSATISFIABLE"
+  }
+}

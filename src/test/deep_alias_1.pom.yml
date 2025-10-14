@@ -1,0 +1,243 @@
+# yaml-language-server: $schema=../pom.lsp.yml
+# The following comment allows the YAML language server to validate this file
+# against the schema.
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+# deep_alias_1 pom model
+
+# The intended model is that r[xyzw][123] are all responsible
+# pointers, while x, y, z, w are irresponsible.
+
+# Except for not confirming that malloc() never fails.  This code is
+# memory safe. But it may have lifetime issues.
+
+# deep_alias_1.c
+
+# This code complies with 'strict provenance'
+# (https://doc.rust-lang.org/std/ptr/index.html#strict-provenance)
+# because while there are pointer-to-integer casts, there are no
+# integer-to-pointer casts, which are a much bigger PITA.
+
+Functions:
+  malloc_or_die:
+    args: {}
+    locals:
+      ret:
+        mutable: true
+        resp: responsible
+    return:
+      resp: responsible
+      end: [GOOD]
+
+  update_min_ptr:
+    args:
+      new_ptr:
+        resp: diligent
+    locals: {}
+    return: {}
+
+  sub_min_ptr:
+    args:
+      ptr:
+        resp: diligent
+    locals: {}
+    return: {}
+
+
+  triple_malloc:
+    args:
+      r1:
+        resp: producer
+        referent:
+          resp: responsible
+          start: [ZOMBIE, NUL]
+          end: [GOOD]
+          # This code never verifies that malloc() succeeds, but we'll
+          # assume that it always does, and that every pointer
+          # returned by malloc() is GOOD.
+
+          # Also while *r1 == r2 and *r2 == r3 eventually, that is
+          # established only by *ret so we cannot assume any relations
+          # between r1, r2, and r3.
+      r2:
+        resp: producer
+        referent:
+          resp: responsible
+          start: [ZOMBIE, NUL]
+          end: [GOOD]
+      r3:
+        resp: producer
+        referent:
+          resp: responsible
+          start: [ZOMBIE, NUL]
+          end: [GOOD]
+    locals:
+      ret:
+        resp: irresponsible
+        mutable: true
+        lifetime: [r1]
+        referent:
+          resp: irresponsible
+          mutable: true
+          lifetime: [r2]
+          # We must worry about this lifetime, because it escapes the function
+          # (so does ret, but we make an exception for return values)
+          referent:
+            resp: irresponsible
+            mutable: true
+          lifetime: [r3]
+            # ditto
+    return:
+      resp: irresponsible
+      lifetime: [r1]
+      referent:
+        resp: irresponsible
+        lifetime: [r2]
+        referent:
+          resp: irresponsible
+          lifetime: [r3]
+
+
+  foo:
+    args:
+      x:
+        resp: irresponsible
+        mutable: true
+        lifetime: [z]
+        referent:
+          resp: irresponsible
+          mutable: true
+          referent:
+            resp: irresponsible
+            mutable: true
+      y:
+        resp: irresponsible
+        mutable: true
+        referent:
+          resp: irresponsible
+          mutable: true
+          lifetime: ["*z"]
+          referent:
+            resp: irresponsible
+            mutable: true
+      z:
+        resp: irresponsible
+        mutable: true
+        referent:
+          resp: irresponsible
+          mutable: true
+          referent:
+            resp: irresponsible
+            mutable: true
+      w:
+        resp: irresponsible
+        mutable: true
+        referent:
+          resp: irresponsible
+          mutable: true
+          referent:
+            resp: irresponsible
+            mutable: true
+    locals: {}
+    return: {}
+
+
+  print_ptr_chain:
+    args:
+      var:
+        resp: diligent
+        referent:
+          resp: diligent
+          referent:
+            resp: diligent
+      name:
+        resp: diligent
+    locals: {}
+    return: {}
+
+
+  main:
+    args: {}
+    locals:
+      rx1:
+        resp: responsible
+      rx2:
+        resp: responsible
+      rx3:
+        resp: responsible
+      ry1:
+        resp: responsible
+      ry2:
+        resp: responsible
+      ry3:
+        resp: responsible
+      rz1:
+        resp: responsible
+      rz2:
+        resp: responsible
+      rz3:
+        resp: responsible
+      rw1:
+        resp: responsible
+      rw2:
+        resp: responsible
+      rw3:
+        resp: responsible
+      x:
+        resp: irresponsible
+        mutable: true
+        referent:
+          resp: irresponsible
+          mutable: true
+          referent:
+            resp: irresponsible
+            mutable: true
+      y:
+        resp: irresponsible
+        mutable: true
+        referent:
+          resp: irresponsible
+          mutable: true
+          referent:
+            resp: irresponsible
+            mutable: true
+      z:
+        resp: irresponsible
+        mutable: true
+        referent:
+          resp: irresponsible
+          mutable: true
+          referent:
+            resp: irresponsible
+            mutable: true
+      w:
+        resp: irresponsible
+        referent:
+          resp: irresponsible
+          referent:
+            resp: irresponsible
+
+    return: {}

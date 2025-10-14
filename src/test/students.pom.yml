@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=/code/pom.lsp.yml
+# The following comment allows the YAML language server to validate this file
+# against the schema.
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+# students pom model
+
+# Line 23 is problematic, as hello is a stack pointer, and would be erroneously freed on line 34.  You cannot assign a an irresponsible pointer to a responsible lvalue.
+
+# Line 25 violates POM, as you are trying to send an irresponsible pointer path to free (chosen is irresponsible, so the path chosen->name is irresponsible, even though name is responsible).  Freeing this name gets you in trouble both on line 30 and on lines 33-36 where the freed name is used or freed a second time.
+
+# students.c
+Structs:
+  Student:
+    name:
+      resp: responsible   # initialized and freed in main()
+    major:
+      resp: responsible   # initialized and freed in main()
+
+Functions:
+  main:
+    args:
+      argv:
+        type: array
+        resp: diligent
+        max: argc
+        start: [VALID]
+        referent: diligent
+    locals:
+      hello:
+        resp: diligent # always points to string literal
+      students:
+        type: array
+        max: NUM_STUDENTS # 3
+        referent:       # responsible pointers
+          type: struct
+          struct: Student
+          resp: responsible
+      chosen:
+        resp: irresponsible    # points to a member of students. C-path violation on line 25
+        mutable: true
+    return: {}

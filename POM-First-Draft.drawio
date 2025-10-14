@@ -1,0 +1,135 @@
+<!-- <legal> -->
+<!-- Pointer Ownership Model (POM) Source Code Release -->
+<!--  -->
+<!-- Copyright 2025 Carnegie Mellon University. -->
+<!--  -->
+<!-- NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING -->
+<!-- INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON -->
+<!-- UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR -->
+<!-- IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF -->
+<!-- FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS -->
+<!-- OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT -->
+<!-- MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT, -->
+<!-- TRADEMARK, OR COPYRIGHT INFRINGEMENT. -->
+<!--  -->
+<!-- Licensed under a MIT (SEI)-style license, please see license.txt or -->
+<!-- contact permission@sei.cmu.edu for full terms. -->
+<!--  -->
+<!-- [DISTRIBUTION STATEMENT A] This material has been approved for public -->
+<!-- release and unlimited distribution.  Please see Copyright notice for -->
+<!-- non-US Government use and distribution. -->
+<!--  -->
+<!-- DM25-1262 -->
+<!-- </legal> -->
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0" version="26.0.7">
+  <diagram name="Page-1" id="wSQtJCJCiI8D6M6k9BMx">
+    <mxGraphModel dx="887" dy="401" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-5" target="0G1PQzdRFuaA5u7hQ-Ig-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-5" value="&lt;div&gt;ptr&lt;/div&gt;(responsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-6" value="malloc" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-11" target="0G1PQzdRFuaA5u7hQ-Ig-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-11" value="&lt;div&gt;ptr2&lt;/div&gt;(responsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="20" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-21" target="0G1PQzdRFuaA5u7hQ-Ig-22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-21" value="&lt;div&gt;ptr&lt;/div&gt;(responsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="190" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-22" value="malloc" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-25" value="&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;object * ptr, ptr2;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;ptr = (object*)malloc(sizeof(object)); // responsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;ptr2 = ptr;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; // responsible (branches off: might be resp or irr)&lt;br&gt;&lt;/font&gt;&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="20" y="250" width="660" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-26" value="&lt;font face=&quot;Courier New&quot;&gt;object * ptr = (object*)malloc(sizeof(object)); // responsible&lt;br&gt;&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="20" y="100" width="660" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-28" target="0G1PQzdRFuaA5u7hQ-Ig-29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-28" value="&lt;div&gt;ptr&lt;/div&gt;(responsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="350" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-29" value="malloc" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="350" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-32" target="0G1PQzdRFuaA5u7hQ-Ig-33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-32" value="&lt;div&gt;ptr2&lt;/div&gt;(irresponsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="20" y="430" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-33" value="ptr[ i ]" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="190" y="430" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-37" value="&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;object ** ptr;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;ptr = (object**)malloc(sizeof(object) * n); // responsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;object * ptr2 = ptr[ i ];&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; // irresponsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="20" y="500" width="660" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-39" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-40" target="0G1PQzdRFuaA5u7hQ-Ig-41">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-40" value="&lt;div&gt;ptr&lt;/div&gt;(responsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="590" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-43" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-41" target="0G1PQzdRFuaA5u7hQ-Ig-42">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-41" value="malloc" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="590" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-42" target="0G1PQzdRFuaA5u7hQ-Ig-45">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-42" value="function( ptr );" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="590" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-45" value="&lt;div&gt;inPtr&lt;/div&gt;(irresponsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="360" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-52" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="0G1PQzdRFuaA5u7hQ-Ig-50" target="0G1PQzdRFuaA5u7hQ-Ig-51">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-50" value="&lt;div&gt;ptr&lt;/div&gt;(irresponsible)" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="880" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-51" value="call_lib( hnd );" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="880" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-53" value="&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;HANDLE hnd = create_lib();&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; // responsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;object * ptr = create_instance_lib( hnd );&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; // irresponsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;close_lib( hnd );&lt;br&gt;&lt;/font&gt;&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="20" y="960" width="660" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-54" value="" style="swimlane;startSize=0;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#808080;" vertex="1" parent="1">
+          <mxGeometry x="10" y="30" width="750" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-57" value="" style="swimlane;startSize=0;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#808080;" vertex="1" parent="1">
+          <mxGeometry x="10" y="160" width="750" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-58" value="" style="swimlane;startSize=0;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#808080;" vertex="1" parent="1">
+          <mxGeometry x="10" y="320" width="750" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-59" value="" style="swimlane;startSize=0;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#808080;" vertex="1" parent="1">
+          <mxGeometry x="10" y="570" width="750" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-49" value="&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;object * ptr = (object*)malloc(sizeof(object));&amp;nbsp;&amp;nbsp; // responsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;void doStuff( object * inPtr );&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; // irresponsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;void doOtherStuff( const object * inPtr );&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp; // irresponsible&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;Courier New&quot;&gt;void doOtherStuff2( const object * const inPtr ); // irresponsible&lt;/font&gt;&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="0G1PQzdRFuaA5u7hQ-Ig-59">
+          <mxGeometry x="10" y="196" width="660" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="0G1PQzdRFuaA5u7hQ-Ig-60" value="" style="swimlane;startSize=0;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#808080;" vertex="1" parent="1">
+          <mxGeometry x="10" y="870" width="750" height="200" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

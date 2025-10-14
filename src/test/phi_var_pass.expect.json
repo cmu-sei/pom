@@ -1,0 +1,6 @@
+{
+  "function-satisfiability": {
+    "main": "SATISFIABLE",
+    "test_multiple": "SATISFIABLE"
+  }
+}

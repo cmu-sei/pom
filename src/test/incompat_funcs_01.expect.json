@@ -1,0 +1,6 @@
+{
+  "function-satisfiability": {
+    "main": "UNSATISFIABLE",
+    "my_free": "SATISFIABLE"
+  }
+}

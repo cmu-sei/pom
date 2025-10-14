@@ -1,0 +1,8 @@
+{
+  "function-satisfiability": {
+    "cleanup": "SATISFIABLE",
+    "foo_0": "SATISFIABLE",
+    "foo_1": "SATISFIABLE",
+    "main": "UNSATISFIABLE"
+  }
+}

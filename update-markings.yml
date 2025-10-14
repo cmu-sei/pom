@@ -1,0 +1,176 @@
+# Data used by update_markings.py
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+Manifest: "./manifest.txt"
+
+Product: "Pointer Ownership Model"
+Version: "0.1"
+
+VersionReplaceFiles: []
+
+
+Markings: |-
+  Pointer Ownership Model (POM) Source Code Release
+
+  Copyright 2025 Carnegie Mellon University.
+
+  NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+  INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+  UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+  IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+  FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+  OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+  MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+  TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+
+  Licensed under a MIT (SEI)-style license, please see license.txt or
+  contact permission@sei.cmu.edu for full terms.
+
+  [DISTRIBUTION STATEMENT A] This material has been approved for public
+  release and unlimited distribution.  Please see Copyright notice for
+  non-US Government use and distribution.
+
+  DM25-1262
+
+
+# Any file with one of these extensions need no <legal> tags
+ExcludeExtensions: [
+  # Binary
+  jpg,
+  png,
+  gif,
+  svg,
+
+  pdf,
+  docx,
+  xlsx,
+  pptx,
+
+  pyc,
+  zip,
+
+  so,
+  o,
+  elf,
+
+  class,
+  jar,
+
+  # Extensions with no commenting mechanism
+  del,
+  json,
+  csv,
+  tsv,
+  ans, # usually these are a diff
+
+  # misc extensions
+  tag, TAG,
+  mf, MF,
+  lock,
+  swp,
+  bin,
+  probe,
+  ]
+
+
+# Any file that matches one of these globs does not need legal tags
+# note: https://docs.python.org/3.13/library/pathlib.html#pathlib.PurePath.match
+# when this was written for python 3.12, recursive wildcard ("**") is treated like the non-recursive wildcard ("*")
+ExcludeFiles: [
+  "src/constraint_gen/ghostq/*",
+  "design-extracts/*.c",
+
+  "dos2unix.famous.sorted.pom.yml",
+  "dos2unix.sorted.pom.yml",
+
+  "src/prompt.*.md",
+  "d2u/famous_functions.txt",
+
+  "src/test/__init__.py",
+  "src/__init__.py",
+
+  "src/test/complex_call_graph_01.c",
+  "src/test/complex_call_graph_01.c",
+  "src/test/complex_call_graph_01.pom.yml",
+  "src/test/csv_reader.c",
+  "src/test/template_lifetimes.input",
+  "src/test/template_lifetimes.output",
+
+  ".DS_Store",
+  "requirements.txt",
+  "manifest.txt",
+  "README.md",
+  ".gitignore",
+  ".gitkeep",
+  "License.txt",
+  ]
+
+
+# Any file here needs legal tags in an idiosyncratic format
+# This matches exact filenames not as a glob expression
+FileMap:
+  .gitignore:  '# \1'
+  Dockerfile:  '# \1'
+  Makefile:  '# \1'
+  pom-lint:  '# \1'
+
+
+# Every extension has a regex for how to comment legal tags.
+ExtensionMap:
+  # These extensions need # prefixed, as in Bash
+  sh:         '# \1'
+  py:         '# \1'
+  rb:         '# \1'
+  rs:         '# \1'
+  mk:         '# \1'
+  properties: '# \1'
+  template:   '# \1' # Gradle properties template file
+  yml:        '# \1'
+  yaml:       '# \1'
+
+  # These extensions need // prefixed, as in Java
+  java:       '// \1'
+  c:          '// \1'
+  cpp:        '// \1'
+  cxx:        '// \1'
+  h:          '// \1'
+  hxx:        '// \1'
+  hpp:        '// \1'
+  C:          '// \1'
+  H:          '// \1'
+  js:         '// \1'
+  kts:        '// \1'
+  gradle:     '// \1'
+
+  # These need idiosyncratic comments
+  erb:        '<!-- \1 -->'
+  xml:        '<!-- \1 -->'
+  drawio:        '<!-- \1 -->'
+  sql:        '-- \1'
+  ll:         '; \1'
+  md:         '\1  '
+  html:       '<p>\1'
+  txt:        '\1'

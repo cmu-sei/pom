@@ -1,0 +1,23 @@
+{
+    "complete-ast-model": true,
+    "output": {
+        "exists": true,
+        "correct-arguments": true,
+        "correct-locals": true,
+        "correct-return": true,
+        "arguments": {
+            "str": {
+                "exists": true
+            }
+        },
+        "locals": {}
+    },
+    "main": {
+        "exists": true,
+        "correct-arguments": true,
+        "correct-locals": true,
+        "correct-return": true,
+        "arguments": {},
+        "locals": {}
+    }
+}

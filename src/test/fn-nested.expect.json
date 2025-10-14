@@ -1,0 +1,7 @@
+{
+  "function-satisfiability": {
+    "main": "SATISFIABLE",
+    "output": "SATISFIABLE",
+    "output_nested": "SATISFIABLE"
+  }
+}

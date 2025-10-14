@@ -1,0 +1,10 @@
+{
+  "function-satisfiability": {
+    "erase": "SATISFIABLE",
+    "main": "SATISFIABLE",
+    "new_list": "SATISFIABLE",
+    "peek": "SATISFIABLE",
+    "pop": "SATISFIABLE",
+    "push": "SATISFIABLE"
+  }
+}

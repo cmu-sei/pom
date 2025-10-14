@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../../pom.lsp.yml
+# The following comment allows the YAML language server to validate this file
+# against the schema.
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+Functions:
+  main:
+    args:
+      argv:
+        type: array
+        resp: diligent
+        max: argc
+        start: [VALID]
+        referent: diligent
+    locals:
+      p1:
+        resp: responsible
+      p2:
+        resp: responsible
+      q:
+        resp: responsible
+        # should be irresponsible, but is freed on line 16, so responsible.
+        # unifying if/else clauses on line 14 should have both p1/p2 be GOOD|NULL|ZOMBIE
+        # making tricky to free correctly.
+        # The SA POM verifier can't confirm this code is memory safe, because q aliases with p1 or p2.
+        # But a SAT solver could work.
+    return: {}

@@ -1,0 +1,51 @@
+# Proof
+
+## Copyright
+
+<legal>
+Pointer Ownership Model (POM) Source Code Release
+
+Copyright 2025 Carnegie Mellon University.
+
+NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+
+Licensed under a MIT (SEI)-style license, please see license.txt or
+contact permission@sei.cmu.edu for full terms.
+
+[DISTRIBUTION STATEMENT A] This material has been approved for public
+release and unlimited distribution.  Please see Copyright notice for
+non-US Government use and distribution.
+
+DM25-1262
+</legal>
+
+## Proof
+
+Proposition: If there are no out-of-scope pointers and all constraints of the POM model are satisfied, then the program has no double-frees.
+Proof: Follows from the Unique Responsible Path Lemma below, as detailed below (TODO).
+
+Simplifications:
+- For now, let us assume a program that consists of a single function, `main`.  So, no need to worry about producer/consumer arguments yet.
+- Assume no pointers appear in arrays.  So, no need to worry about which part of an array has zombie pointers.
+- Right now, we don't handle structs or unions yet.
+
+A *program point* is a point immediately before or immediately after a given statement is executed.  Given a statement *S*, we write *S-pre* to denote that program point before *S* and we write *S-post* to denote the program point after *S*.  We assume that each line of the program contains the start of at most one statement, so that a statement can be identified by the line number where it starts.
+
+We use the term *heap object* to denote an object (e.g., an object allocated via `malloc`) that the program is responsible for freeing.
+
+In the absence of structs, unions, and arrays, a *C-path* is a local or global variable with zero or more dereferences.  E.g., if `v` is a variable, then `v`, `*v`, and `**v` are all C-paths.  See design.md for definition of "C-path" when there are structs, unions, or arrays.
+
+Definition: At a given program point, a *responsible* C-path is a C-path where every pointer (except the first element, if it is an LLVM `%local_var` (the result of an `alloca(...)`) or an LLVM `@global_var`) is a good responsible pointer.  E.g., the C-path `**v` is a responsible C-path iff `*v` and `**v` are both responsible and both good at the given program point.
+
+Unique Responsible Path Lemma: If there are no out-of-scope pointers and all constraints of the POM model are satisfied, then at every program point, every live heap object has at most one responsible C-path.
+Proof is by induction:
+- Base case: At the start of the program, there are no heap objects.
+- Inductive case 1: Given a statement *S*, assume that the property holds at *S-pre*.  Then the property also holds at *S-post*.
+- Inductive case 2: Given a statement *S*, assume that, for each predecessor *P* of *S*, the property holds at the program point *P-post*.  Then the property holds at *S-pre*.

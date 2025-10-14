@@ -1,0 +1,908 @@
+# yaml-language-server: $schema=./src/pom.lsp.yml
+# The following comment allows the YAML language server to validate this file
+# against the schema.
+
+# <legal>
+# Pointer Ownership Model (POM) Source Code Release
+# 
+# Copyright 2025 Carnegie Mellon University.
+# 
+# NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+# INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+# UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+# IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+# FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+# OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+# MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+# TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+# 
+# Licensed under a MIT (SEI)-style license, please see license.txt or
+# contact permission@sei.cmu.edu for full terms.
+# 
+# [DISTRIBUTION STATEMENT A] This material has been approved for public
+# release and unlimited distribution.  Please see Copyright notice for
+# non-US Government use and distribution.
+# 
+# DM25-1262
+# </legal>
+
+# dos2unix POM model (built by hand).
+# dos2unix.sorted.pom.yml is a sorted version of this file. What the builder *should* give you
+
+
+Functions:
+
+# common.c
+  d2u_strncpy:
+    args:
+      dest:
+        resp: irresponsible
+        mutable: true
+        # dest is a valid ptr before AND after function
+      src:
+        resp: diligent
+
+    locals: {}
+
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [dest]
+
+  d2u_fclose:
+    args:
+      fp:
+        resp: responsible
+        start: [GOOD]
+        end: [ZOMBIE]
+        destructor: fclose
+      filename:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      m:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  d2u_PrintLastError:
+    args:
+      progname:
+        resp: diligent
+    locals:
+      lpMsgBuf:
+        resp: responsible
+        destructor: LocalFree
+    return: {}
+
+  d2u_WideCharToMultiByte:
+    args:
+      lpWideCharStr:
+        resp: diligent
+      lpMultiByteStr:
+        resp: diligent
+        start: [VALID, NUL]
+      lpDefaultChar:
+        resp: diligent
+        start: [VALID, NUL]
+
+    locals: {}
+    return: {}
+
+  d2u_MultiByteToWideChar:
+    args:
+      lpMultiByteStr:
+        resp: diligent
+      lpWideCharStr:
+        resp: diligent
+        start: [VALID, NUL]
+
+    locals: {}
+    return: {}
+
+  d2u_utf8_fprintf:
+    args:
+      stream:
+        resp: diligent
+      char:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  d2u_ansi_fprintf:
+    args:
+      stream:
+        resp: diligent
+      char:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  d2u_rename:
+    args:
+      oldname:
+        resp: diligent
+      newname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  d2u_unlink:
+    args:
+      filename:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  symbolic_link:
+    args:
+      path:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  regfile:
+    args:
+      path:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  regfile_target:
+    args:
+      path:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+# This function is preprocesed out (only defined in Windows)
+  glob_warg: # common.c:505
+    args:
+      wargv:
+        type: array
+        max: argc
+        resp: diligent # CommandLineToArgvW allocates prior to function call
+      argv:
+        resp: producer
+        referent:
+          type: array
+          max: argc_glob + 1
+          start: [ZOMBIE, NUL]
+          end: [GOOD]
+          referent: responsible
+      ipFlag:
+        resp: diligent # malloc called prior to function call
+      progname:
+        resp: diligent # on stack -- no allocation
+    locals:
+      warg:
+        resp: irresponsible
+        mutable: true
+      # points to wargv[i]
+      # points to a slice of allocated memory
+      # does not own memory
+      # the memory it points to isn't explicity owned within function
+      path:
+        resp: responsible  # _wcsdup calls malloc, owns pointer
+      path_and_filename:
+        resp: responsible  # calls malloc, owns pointer
+      "ptr:514": # line number to disambiguate multiple vars named 'ptr':
+        resp: irresponsible
+        mutable: true
+      # points to a character
+      # does not own memory
+      # points to a slice of memory owned by path
+      arg:
+        resp: responsible  # calls malloc
+      argv_new: # calls malloc:
+        type: array
+        max: argc_glob+1  # expression
+        resp: producer
+        referent: responsible  # pointers
+      errstr:
+        resp: irresponsible  # pointer given by stdlib (strerror)
+      hFind:
+        resp: responsible  # file handle gives ownership to handle
+      new_argv_new: # calls realloc:
+        type: array
+        max: argc_glob+1  # expression
+        resp: producer
+        referent: responsible  # pointers
+    return: {}
+
+  printBSDLicense:
+    args: {}
+    locals: {}
+    return: {}
+
+  is_dos2unix:
+    args:
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  PrintUsage:
+    args:
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  PrintVersion:
+    args:
+      progname:
+        resp: diligent
+      localedir:
+        resp: diligent # ifdef'd out
+
+    locals: {}
+    return: {}
+
+  OpenInFile:
+    args:
+      ipFN:
+        resp: diligent
+
+    locals: {}
+    return: # hands off ownership of file handle
+      resp: responsible
+      start: [GOOD, NUL]
+      destructor: fclose
+
+  OpenOutFile:
+    args:
+      opFN:
+        resp: diligent
+
+    locals: {}
+    return: # hands off ownership of file handle
+      resp: responsible
+      start: [GOOD, NUL]
+      destructor: fclose
+
+  OpenOutFiled:
+    args: {}
+    locals: {}
+    return: # hands off ownership of file handle
+      resp: responsible
+      start: [GOOD, NUL]
+      destructor: fclose
+
+  # This only is defined for Windows (b/c clashes with POSIX dirname(1))
+  dirname:
+    args:
+      path:
+        resp: diligent
+    locals:
+      ptr:
+        resp: irresponsible
+        mutable: true
+
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [path]
+
+  # This only is defined for Windows (b/c clashes with POSIX dirname(1))
+  basename:
+    args:
+      path:
+        resp: diligent
+    locals:
+      ptr:
+        resp: irresponsible
+        mutable: true
+
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [path]
+
+# While dirname() and basename() are defined in common.c, they are
+# ifdef'd out by the Redemption container.
+
+# POSIX says: The dirname() function may modify the string pointed to
+# by path, and may return a pointer to static storage that may then be
+# overwritten by a subsequent call to dirname().  and says the same
+# wrt basename().  So we can assume dirname() and basename() take &
+# return valid irresponsible pointers, just like their sample
+# implementations in common.c.
+
+# NOTE: this function is preprocessed out in the build in the
+# Redemption container, so it need not be included here.
+  d2u_mktemp:
+    args:
+      template:
+        resp: diligent
+
+    locals:
+      cpy1: # freed, dn points to it, but never used after free:
+        resp: responsible
+      cpy2: # freed, bn points to it, but never used after free:
+        resp: responsible
+      dn:
+        resp: irresponsible
+      bn:
+        resp: irresponsible
+      ptr:
+        resp: irresponsible
+        mutable: true
+      fname_str:
+        resp: responsible
+
+    return:
+      resp: responsible # temporary file name
+      start: [GOOD, NUL]
+
+# This code violates POM by assigning fname_str's value to fname_ret,
+# which makes fname_str a zombie. Then they use fname_str on lines 993
+# and 999. This code could comply with POM by s/fname_str/fname_ret/;
+# in lines 993 and 999.
+  MakeTempFileFrom:
+    args:
+      OutFN:
+        resp: diligent
+      fname_ret:
+        resp: producer
+        referent:
+          resp: responsible
+          start: [ZOMBIE, NUL]
+          end: [GOOD, NUL]
+
+    locals:
+      cpy: # freed, dir relies on it, but not used after free:
+        resp: responsible
+      dir:
+        resp: irresponsible # cpy & dir are the same
+        mutable: true
+      fname_str:
+        resp: responsible # hands off ownership to fname_ret array)
+      fp:
+        resp: responsible
+        destructor: fclose  # or d2u_fclose
+      name:
+        resp: responsible  # passes ptr to fname_ret
+
+    return:
+      resp: responsible
+      start: [GOOD, NUL]
+      destructor: fclose
+
+# If lFN is a link, and realpath() or canonicalize_file_name() fail,
+# they both return NULL, but the null check does not overrite *rFN. So
+# if this function returns -1 as error, it leaves *rFN unchanged.
+
+# If lFN is a link, then canonicalize_file_name() returns a
+# responsible pointer. (So does realpath().) If good, it gets assigned
+# to *rFN and then goes out of scope. Which means that *rFN must be
+# responsible. Otherwise lFN is not a link, it gets directly assigned
+# to *rFN.  This would mean either that *rFN is irresponsible (which
+# contradicts lFN being a link) or that *rFN is responsible and lFN
+# becomes a zombie. That is, lFN becomes a zombie only if it is not a
+# symbolic link. So this function violates POM!
+
+# A simple fix would be for *rFN to be responsible (zombie, NULL->good)
+# and receive a clone of lFN, perhaps by using strdup(lFN) on line
+# 1100 and 1102. (This would make lFN irresponsible.) This function is
+# invoked only by ConvertNewFile(), which treats lFN as irresponsible
+# and *rFN as responsible.
+  ResolveSymbolicLink:
+    args:
+      lFN:
+        resp: diligent
+      rFN:
+        resp: producer  # ZOMBIE ,  NUL -> GOOD ,  unchanged & error (return -1) !
+        referent:
+          resp: responsible
+          start: [ZOMBIE, NUL]
+          end: [GOOD]
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      errstr:
+        resp: irresponsible
+      targetFN: # freed, rFN assigned to targetFN, but not in same control flow:
+        resp: responsible
+      rVal:
+        resp: responsible  # gets return value of realpath, passes to rFN. targetFN becomes ZOMBIE.  But realpath() violates POM
+    return: {}
+
+  read_bom:
+    args:
+      f:
+        resp: diligent
+        start: [VALID, NUL]
+      bomtype:
+        resp: diligent # integer value
+
+    locals: {}
+
+    return:
+      resp: irresponsible
+      start: [VALID, NUL]
+      lifetime: [f]
+
+  write_bom:
+    args:
+      f:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return:
+      resp: irresponsible
+      start: [VALID, NUL]
+      lifetime: [f]
+
+  print_bom:
+    args:
+      filename:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  print_bom_info:
+    args: {}
+    locals: {}
+    return: {}
+
+  check_unicode_info:
+    args:
+      InF:  # almost diligent, but assigned to itself on line 1335
+        resp: irresponsible
+        start: [NUL, VALID]
+        end: [NUL, VALID]
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+      bomtype_orig:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  check_unicode:
+    args:
+      InF:  # almost diligent, but assigned to itself on line 1377
+        end: [NUL, VALID]
+        resp: irresponsible
+        start: [NUL, VALID]
+      TempF:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      ipInFN:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+# TargetFN should be responsible, But line 1513 violates TargetFN
+# being responsible, by giving it ipOutFN (which is
+# irresponsible). This could be fixed by:
+#
+# 1. Commenti out line 1513 (TargetFN must remain a zombie),
+# 2. Add:
+#     else {
+#       TargetFN = strdup(ipOutFN);
+#     }
+# to line 1526
+# 3. Make the freeing of TargetFN unconditional (remove the condition)
+
+# Line 1515 says:
+#     ResolveSymlinkResult = 0; /* indicates that TargetFN need not be freed */
+# and further analysis shows that the comment is correct: the
+# ResolveSymlinkResult flag does correctly indicate whether TargetFN
+# should be freed.  So this code is currently memory-safe, but using a
+# variable to keep track of whether TargetFN should be freed violates
+# POM.
+  ConvertNewFile:
+    args:
+      ipInFN:
+        resp: diligent
+      ipOutFN:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+      Convert:
+        resp: diligent
+      ConvertW:
+        resp: diligent
+    locals:
+      InF:
+        resp: responsible
+        destructor: fclose
+      TempF:
+        resp: responsible
+        destructor: fclose
+      TempPath:
+        resp: responsible
+      errstr:
+        resp: irresponsible
+      TargetFN:
+        resp: responsible
+    return: {}
+
+  ConvertToStdout:
+    args:
+      ipInFN:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+      Convert:
+        resp: diligent
+      ConvertW:
+        resp: diligent
+    locals:
+      InF:
+        resp: responsible
+        destructor: fclose
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  ConvertStdio:
+    args:
+      ipFlag:
+        resp: diligent # !
+      progname:
+        resp: diligent # !
+      Convert:
+        resp: diligent
+      ConvertW:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  print_messages_stdio:
+    args:
+      pFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  print_format:
+    args:
+      pFlag:
+        resp: diligent
+      informat:
+        resp: diligent
+      outformat:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  print_messages:
+    args:
+      pFlag:
+        resp: diligent
+      infile:
+        resp: diligent
+        start: [NUL, VALID]
+      outfile:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  print_messages_info:
+    args:
+      pFlag:
+        resp: diligent
+      infile:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  printInfo:
+    args:
+      ipFlag:
+        resp: diligent
+      filename:
+        resp: diligent
+
+    locals:
+      ptr:
+        resp: irresponsible
+    return: {}
+
+  FileInfo:  # FileInfoW is similar
+    args:
+      ipInF:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      filename:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  GetFileInfo:
+    args:
+      ipInFN:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      InF:
+        resp: responsible
+        destructor: fclose
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  GetFileInfoStdio:
+    args:
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  get_info_options:
+    args:
+      option:
+        resp: diligent
+      pFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      ptr:
+        resp: irresponsible
+    return: {}
+
+  parse_options:
+    args:
+      argv:
+        resp: diligent
+      pFlag:
+        resp: diligent
+      localedir:
+        resp: diligent
+      progname:
+        resp: diligent
+      PrintLicense:
+        resp: diligent
+      Convert:
+        resp: diligent
+      ConvertW:
+        resp: diligent
+    locals:
+      ptr:   # ifdef'd out in POM container
+        resp: irresponsible
+    return: {}
+
+  d2u_getc_error:
+    args:
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  d2u_putc_error:
+    args:
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  d2u_putwc_error:
+    args:
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+  d2u_getwc:
+    args:
+      f:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  d2u_ungetwc:
+    args:
+      f:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  d2u_putwc:
+    args:
+      f:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals:
+      errstr:
+        resp: irresponsible
+    return: {}
+
+# dos2unix.c
+
+# The unix2dos.c file appears to be the same as dos2unix.c. main() is
+# the same wrt POM and the other functions all use irresponsible
+# pointers.
+
+# StripDeliminterW and ConvertDosToUnixW are identical
+  StripDelimiter:
+    args:
+      ipInF:
+        resp: diligent
+      ipOutF:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      converted:
+        resp: diligent
+      progname:
+        resp: diligent
+
+    locals: {}
+    return: {}
+
+  ConvertDosToUnix:
+    args:
+      ipInF:
+        resp: diligent
+      ipOutF:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      ConvTable:
+        resp: irresponsible
+        mutable: true
+    return: {}
+
+# argv_new is responsible in the D2U_UNIFILE configuration, but never
+# freed (memory leak!)
+# argv_new is irresponsible in the other configuration.
+  main:
+    args:
+      argv:
+        type: array
+        resp: diligent
+        max: argc
+        referent: diligent
+    locals:
+      pFlag:
+        resp: responsible
+      ptr:
+        resp: irresponsible
+      argv_new:
+        type: array
+        resp: diligent  # responsible on Windows
+        max: argc_new
+        referent: diligent  # responsible on Windows
+      argv_glob:
+        resp: diligent # unused on Linux
+        # For Windows:
+        # resp: responsible
+        # referent:
+        #   type: array
+        #   max: argc_new
+        #   referent: responsible
+      localedir:
+        resp: irresponsible # stack
+        mutable: true
+      progname:
+        resp: irresponsible # stack
+        mutable: true
+      wargv:
+        resp: diligent # unused on Linux
+    return: {}
+
+# querycp.c
+  query_con_codepage:
+    args: {}
+    locals: {}
+    return: {}
+
+# unix2dos.c
+
+  AddExtraDOSNewLine: # AddExtraDOSNewLineW is similar
+    args:
+      ipOutF:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals: {}
+    return: {}
+
+  ConvertUnixToDos: # ConvertUnixToDosW is similar
+    args:
+      ipInF:
+        resp: diligent
+      ipOutF:
+        resp: diligent
+      ipFlag:
+        resp: diligent
+      progname:
+        resp: diligent
+    locals:
+      ConvTable:
+        resp: irresponsible
+        mutable: true
+    return: {}

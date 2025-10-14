@@ -1,0 +1,10 @@
+{
+  "function-satisfiability": {
+    "foo": "SATISFIABLE",
+    "main": "SATISFIABLE",
+    "main_good": "UNSATISFIABLE",
+    "main_null": "UNSATISFIABLE",
+    "main_uninit": "UNSATISFIABLE",
+    "main_zombie": "UNSATISFIABLE"
+  }
+}

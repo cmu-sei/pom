@@ -1,0 +1,62 @@
+/*
+// <legal>
+// Pointer Ownership Model (POM) Source Code Release
+// 
+// Copyright 2025 Carnegie Mellon University.
+// 
+// NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+// INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+// UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+// IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+// FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+// OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+// MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+// TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+// 
+// Licensed under a MIT (SEI)-style license, please see license.txt or
+// contact permission@sei.cmu.edu for full terms.
+// 
+// [DISTRIBUTION STATEMENT A] This material has been approved for public
+// release and unlimited distribution.  Please see Copyright notice for
+// non-US Government use and distribution.
+// 
+// DM25-1262
+// </legal>
+ */
+
+
+#include <stdlib.h>
+#include <stdio.h>
+
+void* malloc_or_die(size_t n) {
+    void* ret = malloc(n);
+    if (!ret) {
+        abort();
+    }
+    return ret;
+}
+
+int main(int argc, char** argv) {
+    int x;
+    int* a = &x;
+
+    int** b = malloc_or_die(sizeof(int*));
+    int** c = malloc_or_die(sizeof(int*));
+    int** d = malloc_or_die(sizeof(int*));
+
+    if (argc % 2) {
+                  *b = a;
+             *c = *b;
+        *d = *c;
+    } else {
+                  *c = a;
+             *b = *c;
+        *d = *b;
+    }
+
+    printf("**d = %d\n", **d);
+    free(b);
+    free(c);
+    free(d);
+    return 0;
+}

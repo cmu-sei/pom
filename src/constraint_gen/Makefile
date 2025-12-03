@@ -35,44 +35,31 @@ CXXFLAGS = `$(LLVM_CONFIG) --cxxflags` -std=c++17 -g -fPIC -fno-rtti -DCLANG_VER
 LDFLAGS = `$(LLVM_CONFIG) --ldflags`
 LIBS = `$(LLVM_CONFIG) --libs`
 
-# Source files and targets
-CONSTRAINT_SOURCES = ConstraintGenPass.cpp
-VARSTORE_SOURCES = VarStorePass.cpp
+# List of passes to build
+PASSES = ConstraintGenPass VarStorePass FuncPtrPass FuncPtrExpander InternalizeGlobals PrintCallees PrintPtrDepth FreezeUB
 
-CONSTRAINT_OBJECTS = $(CONSTRAINT_SOURCES:.cpp=.o)
-VARSTORE_OBJECTS = $(VARSTORE_SOURCES:.cpp=.o)
+# Automatically generate source files, objects, and targets
+SOURCES = $(addsuffix .cpp, $(PASSES))
+OBJECTS = $(addsuffix .o, $(PASSES))
+TARGETS = $(addsuffix .so, $(PASSES))
 
-CONSTRAINT_TARGET = ConstraintGenPass.so
-VARSTORE_TARGET = VarStorePass.so
+.PHONY: all clean help
 
-ALL_OBJECTS = $(CONSTRAINT_OBJECTS) $(VARSTORE_OBJECTS)
-ALL_TARGETS = $(CONSTRAINT_TARGET) $(VARSTORE_TARGET)
+all: $(TARGETS)
 
-.PHONY: all clean help constraint-gen var-store
+# Pattern rule: build any .so from its corresponding .o
+%.so: %.o
+	$(CXX) -shared -o $@ $< $(LDFLAGS) $(LIBS)
 
-all: $(ALL_TARGETS)
-
-constraint-gen: $(CONSTRAINT_TARGET)
-
-var-store: $(VARSTORE_TARGET)
-
-$(CONSTRAINT_TARGET): $(CONSTRAINT_OBJECTS)
-	$(CXX) -shared -o $@ $^ $(LDFLAGS) $(LIBS)
-
-$(VARSTORE_TARGET): $(VARSTORE_OBJECTS)
-	$(CXX) -shared -o $@ $^ $(LDFLAGS) $(LIBS)
-
+# Pattern rule: build any .o from its corresponding .cpp
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(ALL_OBJECTS) $(ALL_TARGETS)
+	rm -f $(OBJECTS) $(TARGETS)
 
 help:
 	@echo "Usage:"
-	@echo "  make                   # Build both passes with LLVM 15 (default)"
-	@echo "  make constraint-gen    # Build only ConstraintGenPass"
-	@echo "  make var-store         # Build only VarStorePass"
 	@echo "  make CLANG_VER=15      # Build with LLVM 15"
 	@echo "  make CLANG_VER=18      # Build with LLVM 18"
 	@echo "  make clean             # Clean build files"
@@ -80,11 +67,9 @@ help:
 	@echo "Current configuration:"
 	@echo "  CLANG_VER = $(CLANG_VER)"
 	@echo "  LLVM_CONFIG = $(LLVM_CONFIG)"
+	@echo "  PASSES = $(PASSES)"
 
-install: $(ALL_TARGETS)
-	cp $(ALL_TARGETS) `$(LLVM_CONFIG) --libdir`/
-
-.PHONY: test-15 test-18 test-varstore-15 test-varstore-18
+.PHONY: test-15 test-18
 test-15: $(CONSTRAINT_TARGET) $(VARSTORE_TARGET)
 	clang-15 -g -S -emit-llvm -Xclang -disable-O0-optnone -fno-discard-value-names  ../test/join_good_zombie.c -o join_good_zombie.raw.ll
 	opt-15 -enable-new-pm=0 -load ./VarStorePass.so -var-store -mem2reg join_good_zombie.raw.ll -S -o join_good_zombie.ssa.ll

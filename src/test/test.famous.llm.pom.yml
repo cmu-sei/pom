@@ -25,33 +25,351 @@
 
 Functions:
 
+  __assert_fail:
+    signature: "void __assert_fail(const char *assertion, const char *file, unsigned int line, const char *function);"
+    args:
+      assertion:
+        arg_idx: 0
+        resp: diligent
+        start: [VALID]
+      file:
+        arg_idx: 1
+        resp: diligent
+        start: [VALID]
+      function:
+        arg_idx: 3
+        resp: diligent
+        start: [NUL, VALID]
+
+  __isoc99_sscanf:
+    signature: "int __isoc99_sscanf(const char *str, const char *format, ...)"
+    args:
+      str:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+      format:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+      var-args:
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+    return: {}
+
+  __isoc99_swscanf:
+    signature: "int __isoc99_swscanf(const wchar_t *wcs, const wchar_t *format, ...)"
+    args:
+      wcs:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+      format:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+      var-args:
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+    return: {}
+
+  llvm.memcpy.p0.p0.i64:
+    signature: "void llvm.memcpy.p0.p0.i64(void *dest, const void *src, i64 len, i1 isvolatile)"
+    args:
+      dest:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+      src:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  llvm.memset.p0.i64:
+    signature: "void llvm.memset.p0.i64(void *dest, i8 val, i64 len, i1 isvolatile)"
+    args:
+      dest:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  wcscpy:
+    signature: "wchar_t *wcscpy(wchar_t *dest, const wchar_t *src)"
+    args:
+      dest:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+      src:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [dest]
+
+  wprintf:
+    signature: "int wprintf(const wchar_t *format, ...)"
+    args:
+      format:
+        arg_idx: 0
+        resp: irresponsible
+        start: [VALID]
+        end: [VALID]
+      var-args:
+        resp: irresponsible
+        start: [VALID]
+    return: {}
+
+  wcsdup:
+    signature: "wchar_t *wcsdup(const wchar_t *s)"
+    args:
+      s:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: responsible
+      start: [NUL, GOOD]
+
+  wmemset:
+    signature: "wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n)"
+    args:
+      s:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [s]
+
+  inet_addr:
+    signature: "in_addr_t inet_addr(const char *cp)"
+    args:
+      cp:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  connect:
+    signature: "int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)"
+    args:
+      addr:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  recv:
+    signature: "ssize_t recv(int sockfd, void *buf, size_t len, int flags)"
+    args:
+      buf:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  strchr:
+    signature: "char *strchr(const char *s, int c)"
+    args:
+      s:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true_or_false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      mutable: =mut(s)
+      start: [NUL, VALID]
+      lifetime: [s]
+
+  getenv:
+    signature: "char *getenv(const char *name)"
+    args:
+      name:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      start: [NUL, VALID]
+      lifetime: [static]
+
+  strncat:
+    signature: "char *strncat(char *dest, const char *src, size_t n)"
+    args:
+      dest:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+      src:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [dest]
+
+  bind:
+    signature: "int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)"
+    args:
+      addr:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  accept:
+    signature: "int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)"
+    args:
+      addr:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: true
+        start: [NUL, VALID]
+        end: [NUL, VALID]
+      addrlen:
+        arg_idx: 2
+        resp: irresponsible
+        mutable: true
+        start: [NUL, VALID]
+        end: [NUL, VALID]
+    return: {}
+
+  wcslen:
+    signature: "size_t wcslen(const wchar_t *s)"
+    args:
+      s:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return: {}
+
+  wcschr:
+    signature: "wchar_t *wcschr(const wchar_t *wcs, wchar_t wc)"
+    args:
+      wcs:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true_or_false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      mutable: =mut(wcs)
+      start: [NUL, VALID]
+      lifetime: [wcs]
+
+  fgetws:
+    signature: "wchar_t *fgetws(wchar_t *ws, int n, FILE *stream)"
+    args:
+      ws:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+      stream:
+        arg_idx: 2
+        resp: irresponsible
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      start: [NUL, VALID]
+      lifetime: [ws]
+
+  wcsncat:
+    signature: "wchar_t *wcsncat(wchar_t *dest, const wchar_t *src, size_t n)"
+    args:
+      dest:
+        arg_idx: 0
+        resp: irresponsible
+        mutable: true
+        start: [VALID]
+        end: [VALID]
+      src:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: false
+        start: [VALID]
+        end: [VALID]
+    return:
+      resp: irresponsible
+      start: [VALID]
+      lifetime: [dest]
+
   atoi:
     args:
       nptr:
         arg_idx: 0
         resp: diligent
+        start: [VALID]
     return: {}
-    signature: int atoi(const char *nptr);
+    signature: "int atoi(const char *nptr);"
 
   malloc:
     args: {}
     return:
       destructor: free
       resp: responsible
-      start:
-      - GOOD
-      - NUL
-    signature: void *malloc(size_t size)
+      start: [GOOD, NUL]
+    signature: "void *malloc(size_t size)"
 
   calloc:
     args: {}
     return:
       destructor: free
       resp: responsible
-      start:
-      - GOOD
-      - NUL
-    signature: void *calloc(size_t n, size_t size)
+      start: [GOOD, NUL]
+    signature: "void *calloc(size_t n, size_t size)"
 
   realloc:
     args:
@@ -59,160 +377,148 @@ Functions:
         arg_idx: 0
         destructor: free
         resp: responsible
-        start:
-        - GOOD
-        - NUL
+        start: [GOOD, NUL]
     return:
       destructor: free
       resp: responsible
-      start:
-      - GOOD
-      - NUL
-    signature: void *realloc(void *ptr, size_t size)
+      start: [GOOD, NUL]
+    signature: "void *realloc(void *ptr, size_t size)"
 
   free:
     args:
       ptr:
         arg_idx: 0
         destructor: free
-        end:
-        - ZOMBIE
-        - NUL
+        end: [ZOMBIE, NUL]
         resp: responsible
-        start:
-        - NUL
-        - GOOD
+        start: [NUL, GOOD]
     return: {}
-    signature: void free(void *_Nullable p)
+    signature: "void free(void *_Nullable p)"
 
   strdup:
     args:
       s:
         arg_idx: 0
         resp: diligent
+        start: [VALID]
     return:
       resp: responsible
-      start:
-      - GOOD
-      - NUL
-    signature: char *strdup(const char *s)
+      start: [GOOD, NUL]
+    signature: "char *strdup(const char *s)"
 
   strlen:
     args:
       s:
         arg_idx: 0
         resp: diligent
+        start: [VALID]
     return: {}
-    signature: size_t strlen(const char *s)
+    signature: "size_t strlen(const char *s)"
 
   strcpy:
     args:
       dest:
         arg_idx: 0
-        end:
-        - VALID
+        end: [VALID]
         mutable: true
         resp: irresponsible
-        start:
-        - VALID
+        start: [VALID]
       src:
         arg_idx: 1
         resp: diligent
+        start: [VALID]
     return:
       lifetime: [dest]
+      mutable: true_or_false
       resp: irresponsible
-      start:
-      - VALID
-    signature: char *strcpy(char *dest, const char *src)
+      start: [VALID]
+    signature: "char *strcpy(char *dest, const char *src)"
 
   strncpy:
     args:
       dest:
         arg_idx: 0
-        end:
-        - VALID
+        end: [VALID]
         mutable: true
         resp: irresponsible
-        start:
-        - VALID
+        start: [VALID]
       src:
         arg_idx: 1
         resp: diligent
+        start: [VALID]
     return:
       lifetime: [dest]
+      mutable: true_or_false
       resp: irresponsible
-      start:
-      - VALID
-    signature: char *strncpy(char *dest, const char *src, size_t n)
+      start: [VALID]
+    signature: "char *strncpy(char *dest, const char *src, size_t n)"
 
   strcmp:
     args:
       s1:
         arg_idx: 0
         resp: diligent
+        start: [VALID]
       s2:
         arg_idx: 1
         resp: diligent
+        start: [VALID]
     return: {}
-    signature: int strcmp(const char *s1, const char *s2)
+    signature: "int strcmp(const char *s1, const char *s2)"
 
   strtok:
     args:
       str:
         arg_idx: 0
-        end:
-        - VALID
+        end: [VALID]
         mutable: true
         resp: irresponsible
-        start:
-        - VALID
+        start: [VALID]
       delim:
         arg_idx: 1
         resp: diligent
+        start: [VALID]
     return:
       lifetime: [str]
       resp: irresponsible
-      start:
-      - VALID
-    signature: char *strtok(char *_Nullable restrict str, const char *restrict delim)
+      start: [VALID]
+    signature: "char *strtok(char *_Nullable restrict str, const char *restrict delim)"
 
   fopen:
     args:
       mode:
         arg_idx: 1
         resp: diligent
+        start: [VALID]
       path:
         arg_idx: 0
         resp: diligent
+        start: [VALID]
     return:
       destructor: fclose
       resp: responsible
-      start:
-      - NUL
-    signature: FILE *fopen(const char *path, const char *mode)
+      start: [NUL]
+    signature: "FILE *fopen(const char *path, const char *mode)"
 
   fclose:
     args:
       stream:
         arg_idx: 0
         destructor: fclose
-        end:
-        - ZOMBIE
+        end: [ZOMBIE]
         resp: responsible
-        start:
-        - GOOD
+        start: [GOOD]
     return: {}
-    signature: int fclose(FILE *stream)
+    signature: "int fclose(FILE *stream)"
 
   puts:
     args:
       s:
         arg_idx: 0
         resp: diligent
-        start:
-        - VALID
+        start: [VALID]
     return: {}
-    signature: int puts(const char *s)
+    signature: "int puts(const char *s)"
 
   fgets:
     args:
@@ -220,69 +526,62 @@ Functions:
         arg_idx: 0
         resp: irresponsible
         mutable: true
-        start:
-        - VALID
+        start: [VALID]
       stream:
         arg_idx: 2
         resp: diligent
-        start:
-        - VALID
+        start: [VALID]
     return:
       lifetime: [s]
       resp: irresponsible
-      start:
-      - VALID
-    signature: char *fgets(char *s, int size, FILE *stream)
+      start: [VALID]
+    signature: "char *fgets(char *s, int size, FILE *stream)"
 
   fprintf:
     args:
       format:
         arg_idx: 1
         resp: diligent
-        start:
-        - VALID
+        start: [VALID]
       stream:
         arg_idx: 0
         resp: diligent
-        start:
-        - VALID
+        mutable: true_or_false
+        start: [VALID]
     return: {}
-    signature: int fprintf(FILE *restrict stream, const char *restrict format, ...)
+    signature: "int fprintf(FILE *restrict stream, const char *restrict format, ...)"
 
   printf:
     args:
       format:
         arg_idx: 0
         resp: diligent
-        start:
-        - VALID
-      "var-args":
+        start: [VALID]
+      var-args:
         resp: diligent
+        start: [VALID]
     return: {}
-    signature: int printf(const char *restrict format, ...)
+    signature: "int printf(const char *restrict format, ...)"
 
   snprintf:
     args:
       format:
         arg_idx: 2
         resp: diligent
-        start:
-        - VALID
+        start: [VALID]
       str:
         arg_idx: 0
         resp: diligent
-        start:
-        - NUL
-        - VALID
+        start: [NUL, VALID]
     return: {}
-    signature: int snprintf(size_t size; char str[restrict size], size_t size, const char *restrict format, ...)
+    signature: "int snprintf(size_t size; char str[restrict size], size_t size, const char *restrict format, ...)"
 
   abort:
     args: {}
     return: {}
-    signature: void abort(void)
+    signature: "void abort(void)"
 
   exit:
     args: {}
     return: {}
-    signature: void exit(int status)
+    signature: "void exit(int status)"

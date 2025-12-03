@@ -136,7 +136,7 @@ Functions:
         - VALID
     locals:
       fact_result:
-        mutable: true   # does not need to be mutable
+        mutable: false
         resp: irresponsible
     return: {}
   process_parity:

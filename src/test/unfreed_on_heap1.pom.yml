@@ -30,6 +30,8 @@ Functions:
         resp: diligent
         start:
         - VALID
+        referent:
+          resp: irresponsible
     locals:
       x:
         resp: responsible

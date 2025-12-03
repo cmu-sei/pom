@@ -1,8 +1,5 @@
 # Main constraints
 
-This describes generation of constraints other than those for borrowing/lifetimes.
-See `borrow_design.txt` for borrowing/lifetimes constraints.
-
 ## Copyright
 
 <legal>  
@@ -29,6 +26,12 @@ non-US Government use and distribution.
 DM25-1262  
 </legal>  
 
+## Intro
+Our Pointer-Ownership Model (POM) for C is a Rust-inspired ownership/borrowing discipline enforced at the LLVM IR level. It tracks who owns each heap block, which pointers may be used for writing to memory, and which pointers have outstanding borrows at each program point.
+
+This document describes generation of constraints other than those for borrowing/lifetimes.
+See `borrow_design.txt` for borrowing/lifetimes constraints.
+
 
 ## Type of atomic propositions used in constraints
 Type-qualifier properties (doesn't depend on program point):
@@ -48,12 +51,48 @@ In the absence of structs, unions, and arrays, a *C-path* is a local or global v
 
 Note: Initially, we started with C-paths like `**p` (and this is still used in this file) but we switched to `p[0][0]` (which is used in `borrow_design.txt`).  Some parts of the implementation still use the old notation, but there are helper functions that interconvert where necessary.
 
+
+## Desired properties:
+
+ - A zombie pointer is never used for reading from memory, writing to memory, or freeing memory.
+ - ...
+
+
+## Definitions
+
+Local identifier / virtual register / SSA variable / LLVM temporary: An identifier that appears on the left-hand side of an IR instruction `var = opcode ...`.
+
+Memory location: A location in memory.  A single memory location may be named by multiple C-paths.
+
+Location: A memory location, a virtual register, `func_name::return`, or `func_name::args::arg_name`.
+
+Zombie-dereferencing C-path: At time point `t`, given a C-path `p`, if `zombie(p, t)` is true, then any C-path that contains `p[0]` is said to be a *zombie-dereferencing* C-path.
+
+
+## Instruction types
+
+- malloc
+- free
+- load
+- store
+- copy (`__pom_var_store`)
+- call
+- phi
+- nop
+- cmp
+- br
+- return
+
+
 ## Invariants
 
 Our constraints are designed to establish the following invariants:
- - At every program point, for every memory block M allocated via malloc/calloc/realloc, there is exactly one location that holds a good responsible pointer that points to M.  (Here, the term "location" encompasses both allocated memory locations and LLVM temporaries.)
+ - At every program point, for every live memory block M allocated via malloc/calloc/realloc, there is exactly one location that holds a good responsible pointer that points to M.  (Here, the term "location" encompasses both allocated memory locations and LLVM virtual registers.)
  - At every program point, for every memory location M, there is at most one C-path that can be used to write to M.  Such a C-path must be marked `mut` and must have no outstanding borrows.
- - No irresponsible pointer is a dangling reference to a memory block that has already been freed.
+ - The borrow info is kept accurate and complete for all live non-zombie-dereferencing C-paths.  Specifically:
+   - For every live non-zombie-dereferencing C-path P, we record all live borrows from P.
+   - If p2 and p3 both immutably borrow from p1, and subsequently p1 dies, then we DO NOT remember that p2 and p3 are pointer aliases, because remembering this is not necessary for soundness.
+ - For pred in {good, null, zombie}: for every live non-zombie-dereferencing C-paths `p`, if the state indicated by pred (i.e., being a good ptr, being a null ptr, being a zombie ptr) actually holds true of `p` on any execution trace at program point `t`, then `pred(p, t)` is constrained to be true.  (Note: we do not have any constraints specifically for preventing the state properties from spuriously becoming true, since this isn't necessary for soundness.)
  - ...
 
 ## Constraint Generation
@@ -62,14 +101,23 @@ We generate constraints for (1) specifying what happens during execution of a st
 
 ### Control Flow
 
-Consider two LLVM IR instructions P and S, where P is a predecessor of S.  If P and S are in the same basic block, then P is the instruction immediately preceding S in the basic block.  If P and S are in different basic blocks, then P must be the last instruction of a basic block and S must be the first instruction of a basic block.
+Consider two LLVM IR instructions P and S, where P is a predecessor of S.  (By "P is a predecessor of S", I mean the following:  If P and S are in the same basic block, then P is the instruction immediately preceding S in the basic block.  If P and S are in different basic blocks, then P must be a `br` instruction at the end of a basic block and S must be the first instruction of a basic block that is a jump target of P.)
 
 On any given path, the time point `P-post` is essentially the same time point as `S-pre`.  However, if S has multiple predecessors, then it is useful to have separate names, so that we can generate constraints for P and S separately and then tie them together with control-flow constraints.
 
-We generate the following constraints for every C-path `ptr` that already appears in existing constraints:
+We generate the following constraints for every C-path `ptr` that is live at P-post:
 - `good(ptr, P-post) -> good(ptr, S-pre)` except if P is a conditional jump to S that is conditioned on ptr being null.
 - `null(ptr, P-post) -> null(ptr, S-pre)` except if P is a conditional jump to S that is conditioned on ptr being non-null.
 - `zombie(ptr, P-post) -> zombie(ptr, S-pre)` except if P is a conditional jump to S that is conditioned on ptr being null.
+
+Exception: if ptr (or an alias of it) is the first argument to realloc at instruction S-realloc, then on a branch guarded by realloc returning NULL, the GOOD and ZOMBIE properties of ptr are not preserved from P-post to S-pre, and instead:
+- `good(ptr, S-realloc-pre) -> good(ptr, S-pre)`
+- `zombie(ptr, S-realloc-pre) -> zombie(ptr, S-pre)`
+On the branch guarded by realloc not returning NULL:
+- `good(ptr, S-realloc-pre) -> zombie(ptr, S-pre)`
+- `zombie(ptr, S-realloc-pre) -> zombie(ptr, S-pre)`
+
+If the first argument to realloc would naturally die inside the basic block of the realloc call, then it is artificially kept half-alive until the beginning of the successor basic blocks.  Specifically, it is kept alive for purposes of generating preservation constraints and warning about the death of a good responsible pointer, but it is not kept alive for the purpose of borrowing constraints.
 
 ### Preservation Constraints
 
@@ -123,31 +171,32 @@ We say that two l-values are *location aliases* of each other if their addresses
 E.g., given pointers p1 and p2, if p1 == p2, then p1 is a pointer alias of p2 and `*p1` is a location alias of `*p2`.
 
 We define `location_aliases_of(e)` as follows:
- - If `e` is an LLVM temporary, then `location_aliases_of(e) = {e}`.
+ - If `e` is an LLVM virtual register, then `location_aliases_of(e) = {e}`.
  - If `e` is a pointer dereference `*p`, then `location_aliases_of(e)` is the set of location aliases of `*p`, including `*p` itself.  (This is a MAY analysis, not a MUST analysis.)
-
+We define `location_must_aliases_of(e)` similarly, except using a MUST analysis instead of a MAY analysis.
 
 Let `PtrCopyConstraints(dest, src, S-pre, S-post, S-post-dest)` consist of the following constraints:
 
 - `responsible(dest) -> responsible(src)` # Cannot assign a non-resp ptr value to a resp ptr dest.
 - `mut(dest) -> mut(src)` # Cannot assign a non-mut ptr value to a mut ptr dest.
-- `responsible(dest) | !zombie(src, S-pre)` # POM constraint: cannot assign zombie value to irresp ptr.
+- `responsible(dest) | !zombie(src, S-pre)` # POM constraint: cannot assign zombie value to irresp ptr (this constraint is not necessary for soundness, but it can simplify UNSAT cores that we get from the SAT solver)
 
 - For each `src_ali` in `location_aliases_of(src)`:
   - `responsible(dest) -> (good(src_ali, S-pre) -> zombie(src_ali, S-post))` # Move semantics: copying a resp ptr from src to dest makes src a zombie.
-  - if src_ali is a must alias:
+  - if `src_ali` is a must alias:
     - `!responsible(dest) -> (good(src_ali, S-pre) -> good(src_ali, S-post))`
-  - if src_ali isn't a must alias:
+  - if `src_ali` isn't a must alias:
     - `good(src_ali, S-pre) -> good(src_ali, S-post)`
   - `null(src_ali, S-pre) -> null(src_ali, S-post)`
   - `zombie(src_ali, S-pre) -> zombie(src_ali, S-post)`
 
 - For each `dest_ali` in `location_aliases_of(dest)`:
-  - `(responsible(dest_ali) && good(src, S-pre)) -> good(dest_ali, S-post-dest)`
+  - `good(src, S-pre) -> good(dest_ali, S-post-dest)`
   - `null(src, S-pre) -> null(dest_ali, S-post-dest)`
-  - `(responsible(dest_ali) && zombie(src, S-pre)) -> zombie(dest_ali, S-post-dest)`
+  - `zombie(src, S-pre) -> zombie(dest_ali, S-post-dest)`
 
 - DeepPtrCopyConstraints(dest, src, S-pre, S-post-dest)
+
 If S-post-dest is omitted, it defaults to S-post.
 
 Let `DeepPtrCopyConstraints(dest, src, S-pre, S-post-dest)` consist of the following constraints:
@@ -163,8 +212,14 @@ Note: Since LLVM has switched to opaque pointers, it is nontrivial to determine 
 
 Constraints: 
 - `!responsible(p)`
+- `good(p, S-post)`
 - `responsible(*p) -> zombie(*p, S-post)` if `*p` is a pointer type, and ditto for deeper derefs
 - PreservationConstraints({p}, {})
+
+### Global variables
+
+The address of a global variable is not responsible:
+- `!responsible(addr_global_var)`
 
 ### Statement: `p = call ... @malloc(...)` or `p = call ... @calloc(...)`
 
@@ -176,6 +231,7 @@ Constraints:
 - `responsible(*p) -> zombie(*p, S-post)` if `*p` is a pointer type and the callee isn't calloc, and ditto for deeper derefs
 - PreservationConstraints({p}, {})
 
+
 ### Statement: `call ... @free(p)`
 
 Constraints: 
@@ -185,6 +241,17 @@ Constraints:
 - `null(p, S-pre) -> null(p, S-post)`
 - `!responsible(*p) | !good(*p, S-pre)` (if the type of p is a pointer to a pointer) # prevent memory leak
 - PreservationConstraints({p}, {})
+
+Note: p is always an SSA virtual register.  So, there are no location aliases of p.  A statement `free(*ptr)` at the C source code level gets translated into two instructions at the LLVM IR level:
+```
+    temp = *ptr
+    free(temp)
+```
+The first of these instructions (`temp = *ptr`) moves the value out from `*ptr`, making `*ptr` (along with all its location aliases) a zombie.
+
+If `isa<UndefValue>(p)`, then we generate the constraint:
+- `false # An uninitialized pointer must not be passed to free`
+
 
 ### Statement: `t = call ... @userfunc(act_arg_1, ..., act_arg_n)`
 
@@ -199,7 +266,10 @@ Constraints:
 - `good(*userfunc::formal_param_i, end) -> good(*act_arg_i, S-post)` for i in [1, ..., n] if arg[i] is of pointer type, and ditto for `null` and `zombie` # Function summary indicates how pointed-to object change during the function.
 - If the return value is of pointer type:
     - `responsible(userfunc::return) <-> responsible(t)`
-    - `mut(t) -> mut(userfunc::return)` # Cannot assign a non-mut ptr value to a mut ptr dest.
+    - If the return value has dependent mutability, then:
+        - `mut(t) -> mut(rhs_dep_arg_actual)`
+      else:
+        - `mut(t) -> mut(userfunc::return)` # Cannot assign a non-mut ptr value to a mut ptr dest.
     - `good(userfunc::return, end) -> good(t, S-post)` and ditto for `null` and `zombie`
     - `DeepPtrCopyConstraints(dest=t, src=userfunc::return, S-pre="end", S-post=S-post)`
 - PreservationConstraints({`t`, `act_arg_1`, `act_arg_2`, ..., `act_arg_n`}, {})
@@ -240,6 +310,7 @@ Constraints:
 - `responsible(*p1) -> !good(*p1, S-pre)` # to prevent memory leaks
 - `PtrCopyConstraints(dest=*p1, src=t, S-pre, S-post)`
 - Let `changedCPaths` be `location_must_aliases_of(*p1)`
+  (Note: The purpose of `changedCPaths` is to prevent preservation of existing state properties.  A location alias that is only a MAY alias, not a MUST alias, will effectively have its existing state properties OR'd together the state properties of what is being written.)
 - `PreservationConstraints(changedCPaths, {t})`
 
 
@@ -248,6 +319,19 @@ Constraints:
 Constraints:
 - `PtrCopyConstraints(dest=var, src=src, S-pre, S-post)` if var is of pointer type
 - `PreservationConstraints({var}, {src})`
+
+
+### Statement: `%t = select i1 %cond, typ %val1, typ %val2`, where `typ` is a non-pointer type
+
+Constraints: 
+- `PreservationConstraints({t}, {})`
+
+### Statement: `%t = select i1 %cond, ptr %val1, ptr %val2`
+
+Constraints:
+- `PtrCopyConstraints(dest=t, src=val1, S-pre, S-post)`
+- `PtrCopyConstraints(dest=t, src=val2, S-pre, S-post)`
+- PreservationConstraints({`t`}, {`val1`, `val2`})
 
 
 ### Statement: `%t = phi ptr [ %x_1, %L_1 ], ..., [ %x_n, %L_n ]`
@@ -292,8 +376,52 @@ Constraints:
 
 When a variable x is live immediately before an instruction S but dead immediately after the instruction S (e.g., the instruction S has the last use of x), then generate the following constraint to prohibit memory leaks:
 - `responsible(x) -> !good(x, S-pre)`
+If the instruction S has multiple predecessors, it is a little more complicated: If a variable x is live immediately after any predecessor of S but dead immediately after S, then we generate the constraint:
+- `responsible(x) -> !good(x, S-pre)`
+
+If x is the result of an `alloca` instruction, then we have the following additional constraint:
+- `responsible(*x) -> !good(*x, S-pre)`
+
+At the end of a function, we check that responsible arguments do not hold GOOD values:
+- `responsible(arg) -> !good(arg, end)`
 
 
 ### All responsible pointers are mutable
 
 For every seen cpath `x`, we generate a constraint `responsible(x) -> mut(x)`.
+
+
+### Trying to catch casts that increase pointer depth
+
+At the entry point of a function, for each argument, let `starPfx_argName` be `argName` derereferenced to a depth one more than the declared pointer depth.  (E.g., if `p` is declared `int**`, then `starPfx_argName` for p would be `***p`.)
+- `zombie(starPfx_argName, start)` # Try to flag exceeding declared pointer depth
+
+
+### Enforcing constraints in ".pom.yml" file
+
+For each argument of a function, at the entry point of the function:
+- `responsible(internalArgName) <-> responsible(func_name::args::arg_name)` and similarly for mut and for {good, null, zombie} at 'start'
+
+Let varNam be the name of an LLVM SSA variable and let pomName be `func_name::locals::var_in_source_code`.
+Constraints:
+- `responsible(varName) <-> responsible(pomName)`
+- `mut(varName) <-> mut(pomName)`
+
+
+
+### Note regarding  `__pom_var_store`
+
+In the LLVM IR, you will see `__pom_var_store`.  This comes a LLVM pass `VarStorePass` that we run (before `mem2reg`) to better preserve the correspondence between the C-source-code variables and the SSA variables in LLVM IR.
+
+Our `VarStorePass` LLVM pass changes LLVM code such as
+  ```
+  store ptr %val_to_store, ptr %dest_local_var
+  ```
+to something like:
+  ```
+  %temp = call ptr @__pom_var_store(ptr %val_to_store), !pom_orig_var !39
+  store ptr %temp, ptr %dest_local_var
+  ```
+where `!39` comes from debug metadata for the variable `dest_local_var`.
+
+This change prevents the `mem2reg` pass from changing the code in ways that would present difficulties for the POM verifier.

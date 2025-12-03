@@ -56,6 +56,7 @@ Functions:
     args:
       new_ptr:
         resp: diligent
+        start: [VALID]
     locals: {}
     return: {}
 
@@ -63,6 +64,7 @@ Functions:
     args:
       ptr:
         resp: diligent
+        start: [VALID]
     locals: {}
     return: {}
 
@@ -75,25 +77,42 @@ Functions:
           resp: responsible
           start: [ZOMBIE, NUL]
           end: [GOOD]
-          # This code never verifies that malloc() succeeds, but we'll
-          # assume that it always does, and that every pointer
-          # returned by malloc() is GOOD.
-
-          # Also while *r1 == r2 and *r2 == r3 eventually, that is
-          # established only by *ret so we cannot assume any relations
-          # between r1, r2, and r3.
+          referent:
+            resp: irresponsible
+            mutable: true
+            start: [INVALID]
+            end: [VALID]
+            referent:
+              resp: irresponsible
+              mutable: true
+              start: [INVALID]
+              end: [VALID]
+              lifetime: ['*r3']
+            lifetime: ['*r2']
+        mutable: true
+        start: [VALID]
       r2:
         resp: producer
         referent:
           resp: responsible
           start: [ZOMBIE, NUL]
           end: [GOOD]
+          referent:
+            resp: irresponsible
+            mutable: true
+            start: [INVALID]
+            end: [VALID]
+            lifetime: ['*r3']
+        mutable: true
+        start: [VALID]
       r3:
         resp: producer
         referent:
           resp: responsible
           start: [ZOMBIE, NUL]
           end: [GOOD]
+        mutable: true
+        start: [VALID]
     locals:
       ret:
         resp: irresponsible
@@ -102,23 +121,27 @@ Functions:
         referent:
           resp: irresponsible
           mutable: true
-          lifetime: [r2]
+          lifetime: [r2, r3]
           # We must worry about this lifetime, because it escapes the function
           # (so does ret, but we make an exception for return values)
           referent:
             resp: irresponsible
             mutable: true
-          lifetime: [r3]
-            # ditto
     return:
       resp: irresponsible
-      lifetime: [r1]
+      lifetime: ["*r1"]
       referent:
         resp: irresponsible
-        lifetime: [r2]
+        lifetime: ["*r2"]
         referent:
           resp: irresponsible
-          lifetime: [r3]
+          lifetime: ["*r3"]
+          end: [VALID]
+          mutable: true
+        end: [VALID]
+        mutable: true
+      end: [VALID]
+      mutable: true
 
 
   foo:
@@ -133,6 +156,12 @@ Functions:
           referent:
             resp: irresponsible
             mutable: true
+            start: [VALID, NUL]
+            end: [VALID, NUL]
+          start: [VALID]
+          end: [VALID]
+          lifetime: ['*z']
+        start: [VALID]
       y:
         resp: irresponsible
         mutable: true
@@ -143,6 +172,12 @@ Functions:
           referent:
             resp: irresponsible
             mutable: true
+            start: [VALID, NUL]
+            end: [VALID, NUL]
+            lifetime: ['**z']
+          start: [VALID]
+          end: [VALID]
+        start: [VALID]
       z:
         resp: irresponsible
         mutable: true
@@ -152,6 +187,11 @@ Functions:
           referent:
             resp: irresponsible
             mutable: true
+            start: [VALID]
+            end: [VALID]
+          start: [VALID]
+          end: [VALID]
+        start: [VALID]
       w:
         resp: irresponsible
         mutable: true
@@ -161,6 +201,11 @@ Functions:
           referent:
             resp: irresponsible
             mutable: true
+            start: [VALID]
+            end: [VALID]
+          start: [VALID]
+          end: [VALID]
+        start: [VALID]
     locals: {}
     return: {}
 
@@ -173,8 +218,15 @@ Functions:
           resp: diligent
           referent:
             resp: diligent
+            mutable: true
+            start: [VALID]
+            end: [VALID]
+          start: [VALID, NUL]
+          end: [VALID, NUL]
+        start: [VALID]
       name:
         resp: diligent
+        start: [VALID]
     locals: {}
     return: {}
 
@@ -239,5 +291,6 @@ Functions:
           resp: irresponsible
           referent:
             resp: irresponsible
+        mutable: true
 
     return: {}

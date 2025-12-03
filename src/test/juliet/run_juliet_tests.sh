@@ -1,4 +1,4 @@
-
+#!/usr/bin/env bash
 # <legal>
 # Pointer Ownership Model (POM) Source Code Release
 # 
@@ -23,7 +23,23 @@
 # DM25-1262
 # </legal>
 
+if [ "$OUT_DIR" == "" ]; then
+    export OUT_DIR="out"
+fi
+
+if [ ! -z "$POM_FILE" ]; then
+    export PROPS_FILE=$OUT_DIR/pom.juliet.lib.constraints.txt
+    export ARG_NAMES_FILE=$OUT_DIR/juliet.lib.argnames.txt
+    /host/src/constraint_gen/pom_yaml_to_props.py $POM_FILE --arg-name-file $ARG_NAMES_FILE > $PROPS_FILE
+    unset POM_FILE
+fi
+
+export NO_SSA_FILE="true"
+export SOL_JSON_ARG="--no-solution-json"
+
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 set -e
 for testfile in $@; do
     $SCRIPT_DIR/run_juliet_test_half.sh $testfile GOOD

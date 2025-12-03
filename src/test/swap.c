@@ -44,9 +44,7 @@ int main(int argc, char** argv) {
         swap(&x, &y);
     }
     printf("*x = %d, *y = %d\n", *x, *y);
-    if (argc == 8) {
     free(x);
     free(y);
-    }
     return 0;
 }

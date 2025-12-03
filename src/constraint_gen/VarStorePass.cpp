@@ -1,27 +1,5 @@
 //
-// <legal>
-// Pointer Ownership Model (POM) Source Code Release
-// 
-// Copyright 2025 Carnegie Mellon University.
-// 
-// NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
-// INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
-// UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
-// IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
-// FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
-// OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
-// MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
-// TRADEMARK, OR COPYRIGHT INFRINGEMENT.
-// 
-// Licensed under a MIT (SEI)-style license, please see license.txt or
-// contact permission@sei.cmu.edu for full terms.
-// 
-// [DISTRIBUTION STATEMENT A] This material has been approved for public
-// release and unlimited distribution.  Please see Copyright notice for
-// non-US Government use and distribution.
-// 
-// DM25-1262
-// </legal>
+// <legal></legal>
 //
 
 #include "llvm/Pass.h"
@@ -37,8 +15,11 @@
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/IR/DebugLoc.h"
+#include "llvm/ADT/SmallVector.h"
 #include <map>
 #include <vector>
+
 
 /*****************************************************************************
 * This pass must run *before* the mem2reg pass.
@@ -85,6 +66,48 @@ private:
     void declareVarStoreFunction(Module &M);
     void findAllocaDebugInfo(Function &F);
     bool transformStores(Function &F);
+
+    void fixupNoArgCalls(Function& F) {
+        // Declarations like `int foo();` (in contrast to `int foo(void);`) result in a mess;
+        // we clean it up here.
+        for (llvm::BasicBlock &BB : F) {
+            for (auto It = BB.begin(), E = BB.end(); It != E; ) {
+                llvm::Instruction *I = &*It++;
+                auto *CB = llvm::dyn_cast<llvm::CallBase>(I);
+                if (!CB) continue;
+
+                // Try to get a direct function symbol.
+                llvm::Value *CalleeOp = CB->getCalledOperand();
+                llvm::Value *Stripped = CalleeOp->stripPointerCasts();
+                auto *CalleeFn = llvm::dyn_cast<llvm::Function>(Stripped);
+                if (!CalleeFn) continue;
+
+                // We want a prototype like `i32 ()` and a call with no args.
+                auto *FTy = CalleeFn->getFunctionType();
+                if (FTy->isVarArg() || FTy->getNumParams() != 0) continue;
+                if (CB->arg_size() != 0) continue;
+
+                // If the call already matches, skip.
+                if (CB->getFunctionType() == FTy && CB->getCalledOperand() == CalleeFn) {
+                    continue;
+                }
+
+                // Rebuild the call so its callee is the function itself (no cast).
+                llvm::IRBuilder<> B(CB);
+                auto *NewCall = B.CreateCall(CalleeFn, {});
+                NewCall->setCallingConv(CB->getCallingConv());
+                NewCall->setTailCall(CB->isTailCall());
+                NewCall->setAttributes(CB->getAttributes());
+                if (CB->isTailCall() && CB->isMustTailCall()) {
+                    NewCall->setTailCallKind(llvm::CallInst::TCK_MustTail);
+                }
+
+                CB->replaceAllUsesWith(NewCall);
+                CB->eraseFromParent();
+            }
+        }
+    }
+
 };
 
 void VarStorePassImpl::declareVarStoreFunction(Module &M) {
@@ -114,9 +137,9 @@ void VarStorePassImpl::findAllocaDebugInfo(Function &F) {
 }
 
 bool VarStorePassImpl::transformStores(Function &F) {
-    bool Modified = false;
     std::vector<StoreInst*> StoresToTransform;
     std::vector<ReturnInst*> returnInsts;
+    LLVMContext& Ctx = F.getParent()->getContext();
     
     // Find stores to local pointer variables
     for (auto &BB : F) {
@@ -126,7 +149,20 @@ bool VarStorePassImpl::transformStores(Function &F) {
                 if (!SI->getValueOperand()->getType()->isPointerTy()) {
                     continue;
                 }
-                
+                std::vector<Metadata*> unsupported_features;
+                Value* ptr = SI->getPointerOperand();
+                if (isa<GlobalVariable>(ptr)) {
+                    unsupported_features.push_back(MDString::get(Ctx, "global_ptr_write"));
+                }
+                if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(ptr)) {
+                    Type* sourceElementType = GEP->getSourceElementType();
+                    if (isa<StructType>(sourceElementType)) {
+                        unsupported_features.push_back(MDString::get(Ctx, "write_ptr_to_struct"));
+                    }
+                }
+                MDNode *MD = MDNode::get(Ctx, unsupported_features);
+                SI->setMetadata("unsupported_features", MD);
+                                
                 // Check if storing to a local variable (alloca)
                 if (auto *Alloca = dyn_cast<AllocaInst>(SI->getPointerOperand())) {
                     // Check if alloca is for pointer type
@@ -191,9 +227,9 @@ bool VarStorePassImpl::transformStores(Function &F) {
         
         // Remove the old store
         SI->eraseFromParent();
-        Modified = true;
     }
     
+    bool Modified = true;
     return Modified;
 }
 
@@ -207,7 +243,13 @@ bool VarStorePassImpl::runOnFunction(Function &F) {
     findAllocaDebugInfo(F);
     
     // Transform stores
-    return transformStores(F);
+    transformStores(F);
+    
+    // Fix up no-argument calls
+    fixupNoArgCalls(F);
+
+    bool Modified = true;
+    return Modified;
 }
 
 // Old Pass Manager Implementation (Clang 15 and 16)

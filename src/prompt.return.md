@@ -8,9 +8,9 @@ In particular, I want to know if the function returns a responsible or irrespons
 
 {{"return": {{"resp": "responsible",  "start": ["GOOD"], "destructor": "fclose"}}}}
 
- * A return value is *irresponsible* iff its value is never freed or consumed, usually because some other pointer is responsible for freeing it, or the return value does not point to the heap.  Also indicate the possible states of the return pointer, which can be any of NUL, VALID, or INVALID.  Also indicate how long the object it references will live.  If the object is permanent, then it has a "static" lifetime.  For example, if the return pointer could be VALID or NUL, and its pointed-to object must not outlive the "foo" or "bar" function arguments, but may outlive the "baz" function arguments, then say:
+ * A return value is *irresponsible* iff its value is never freed or consumed, usually because some other pointer is responsible for freeing it, or the return value does not point to the heap.  Also indicate the possible states of the return pointer, which can be any of NUL, VALID, or INVALID.  If it is intended that the memory referenced by the return pointer can be written to, then mark the return value as mutable.  Finally, indicate how long the object it references will live.  If the object is permanent, then it has a "static" lifetime.  For example, if the return pointer could be VALID or NUL, is mutable, and its pointed-to object must not outlive the "foo" or "bar" function arguments, but may outlive the "baz" function arguments, then say:
 
-    {{"return": {{"resp": "irresponsible",  "start": ["NUL", "VALID"], "lifetime": ["foo", "bar"]}}}}
+    {{"return": {{"resp": "irresponsible",  "start": ["NUL", "VALID"], "mutable": true, "lifetime": ["foo", "bar"]}}}}
 
 Responsibility is a type-qualifier property; it doesn't change over time.
 

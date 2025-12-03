@@ -178,6 +178,7 @@ Functions:
         resp: diligent
     return:
       lifetime: [dest]
+      mutable: true_or_false
       resp: irresponsible
       start:
       - VALID
@@ -225,6 +226,7 @@ Functions:
         resp: diligent
     return:
       lifetime: [dest]
+      mutable: true_or_false
       resp: irresponsible
       start:
       - VALID
@@ -234,8 +236,10 @@ Functions:
       s:
         arg_idx: 0
         resp: diligent
+        mutable: true_or_false
     return:
       lifetime: [s]
+      mutable: mut(s)
       resp: irresponsible
       start:
       - NUL

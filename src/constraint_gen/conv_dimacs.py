@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # <legal>
 # Pointer Ownership Model (POM) Source Code Release
 # 
@@ -28,6 +29,8 @@ import json
 import re
 import pdb
 import traceback
+import shlex
+import time
 
 stop = pdb.set_trace
 
@@ -35,7 +38,8 @@ class DummyException(Exception):
     pass
 
 def parse_args(argv):
-    parser = argparse.ArgumentParser(description='Convert to DIMACS for SAT solver or convert solution back to named vars')
+    parser = argparse.ArgumentParser(description='Convert to DIMACS for SAT solver or convert solution back to named vars',
+        exit_on_error = not in_coproc_mode)
     parser.add_argument("input_file", type=str, help="Input file")
     parser.add_argument("-v", type=str, required=True, dest="map_file", help="File for mapping variables names <-> numbers")
     parser.add_argument('-o', type=str, metavar="OUTPUT_FILE", dest="output_file", required=True, help="Output file")
@@ -47,6 +51,7 @@ def parse_args(argv):
     parser.add_argument('--clause-info-file', type=str, help="Get clause metadata from constraints.txt file")
     parser.add_argument('--collapse-flow', action="store_true", help="Collapse preserved properties")
     parser.add_argument('--catch-exc', action="store_true", help="Catch exceptions and print invocation.")
+    parser.add_argument('--coproc', action="store_true", help="Co-process")
     cmdline_args = parser.parse_args(argv)
     return cmdline_args
 
@@ -67,8 +72,34 @@ def read_whole_file(filename):
     with open(filename, 'r') as the_file:
         return the_file.read()
 
+in_coproc_mode = False
+
+def run_as_coproc():
+    global in_coproc_mode
+    in_coproc_mode = True
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        if line in ["quit", "exit"]:
+            return
+        #start_time = time.time()
+        retcode = main(shlex.split(line) + ["--catch-exc"])
+        #sys.stderr.write("conv_dimacs time: %1.3f s\n" % (time.time() - start_time))
+        if retcode == 0:
+            sys.stdout.write("FINISHED\n")
+        else:
+            sys.stdout.write("ERROR\n")
+        sys.stdout.flush()
+
 def main(argv=None):
-    cmdline_args = parse_args(argv)
+    if argv==None and len(sys.argv) >= 2 and sys.argv[1] == "--coproc":
+        run_as_coproc()
+        return 0
+    try:
+        cmdline_args = parse_args(argv)
+    except:
+        return 1
     ExceptionToCatch = (Exception if cmdline_args.catch_exc else DummyException)
     try:
         if cmdline_args.to_dimacs or cmdline_args.output_file.endswith(".dimacs"):
@@ -80,12 +111,13 @@ def main(argv=None):
             conv_from_dimacs(cmdline_args, clause_info)
         else:
             sys.stderr.write("Must specify '--to-dimacs', '--from-dimacs', or '--from-sol'\n")
-            exit(1)
+            return 1
     except ExceptionToCatch as e:
         sys.stderr.write(str(e) + "\n")
         traceback.print_exc()
         sys.stderr.write("\nCommand invocation:\n" + " ".join(sys.argv) + "\n\n")
-        exit(1)
+        return 1
+    return 0
         
 
 def get_clause_info_from_file(cmdline_args):
@@ -141,6 +173,8 @@ def conv_to_dimacs(cmdline_args, clause_info=None):
                     clause_type = "flow"
                 if line.startswith("# Preservation"):
                     clause_type = "preservation"
+                if line.startswith("# End of preservation"):
+                    clause_type = None
                 if line.startswith("# Killed variables"):
                     clause_type = "killed_var"
                 if line.startswith("# Phi incoming: "):

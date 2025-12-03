@@ -32,7 +32,8 @@ typedef vector<cpath_part> cpath;
 // Each additional part of a cpath is either:
 //  - "[0]" (for pointer deref or array indexing) or
 //  - ".fieldname" for struct fields.
-// We sometimes use the term "base var" to refer to the first part of a cpath.
+// We sometimes use the term "base var" to refer to the first part of a cpath,
+// and we say that the C-path is 'rooted' at the base var.
 //
 // IMPORTANT: Unlike C, given a pointer p to a struct, we write "p.field1" to
 // denote the address of the field in struct pointed to by p, rather than
@@ -52,11 +53,11 @@ typedef vector<cpath_part> cpath;
 // data doesn't record which cpaths are mut and/or responsible -- we don't know
 // it yet.
 
-// We do not support freeing anything other than via free().
-// We do not support unions that contain pointers.
+// We do not support unions or structs that contain pointers.
 // We currently do not support recursive data structures such as linked lists.
-// The main things that are missing are (1) generating constraints and
-// borrow/lifetime info when a pointer to a struct is loaded from memory and
+// The main things that are missing (besides properly handing structs at all)
+// are (1) generating constraints and borrow/lifetime info when a pointer to a
+// struct is loaded from memory and
 // (2) verifying that invariants (e.g., no pointers in the struct are zombies)
 // aren’t violated except briefly (e.g., verifying that invariants are always
 // satisfied before function calls and at the end of basic blocks).
@@ -64,6 +65,8 @@ typedef vector<cpath_part> cpath;
 // We catch pointers to local vars that escape that function, but we currently
 // do not support catching pointers to locals inside an interior scope that
 // escape the scope of the local but not the scope of the function.
+// This is because we operate at the LLVM IR level, and conversion to LLVM IR
+// does not preserve this sort of use-after-free error.
 
 // Rust allows different fields of a struct to be borrowed independently.  We
 // currently don't support this; borrowing a field of a struct borrows the
@@ -80,6 +83,8 @@ struct BorrowInfo {
     map<string /*base_var*/, bool> is_dyn_exclusive; // Whether only a single borrow exists dynamically for base_var.
     map<Borrow, bool> is_must_borrow; // Whether this borrow is known to definitely be in effect.
 }
+
+// Note: is_dyn_exclusive turned out not be necessary.  We don't use it, except as an optimization for checking whether we've already generated constraints.
 
 
 ## is_dyn_exclusive
@@ -109,14 +114,14 @@ Statically, p1 may point to x, and p2 may point to x, but there is no execution 
 
 ## When copying a pointer from src to dest (including PomVarStore, phi, load, store, and copying to "func::return" during a return instruction)
 
-- Add Borrow(to=dest, from=src) to BorrowInfo.  
-- Set is_must_borrow[Borrow(to=dest, from=src)] = true.
-- Let src_base be the first cpath part of src.
-- If there is now more than one borrow from src, then
+- Let src_base be the first C-path part of src.
+- If there is an existing borrow from a C-path rooted at src_base, then
   - Set is_dyn_exclusive[src_base] = false.
-  - Add constraints "!mut(other_dest)" for each Borrow(to=other_dest, from=other_src) where the first cpath part of other_src is src_base.
+  - Add constraints "!mut(other_dest)" for each Borrow(to=other_dest, from=other_src) where other_src is rooted at src_base.
   - Add a constraint "!mut(dest)".
   - Note: elsewhere, we add constraints "!mut(x) -> !responsible(x)".
+- Add Borrow(to=dest, from=src) to BorrowInfo.  
+- Set is_must_borrow[Borrow(to=dest, from=src)] = true.
 
 
 ## GEP for calculating address of struct field
@@ -234,39 +239,10 @@ Example 4:
     /* temp is killed here because there are no more uses of it */
     ...
 
-When a variable becomes dead, and borrows_to_dead.size() == 0 and (dead_path is in curBI.borrow_origins):
+Given an LLVM instruction "%x = alloca ...", when x becomes dead and borrows_from_dead.size() > 0:
     In this case, we do not make any changes to the BorrowInfo.  Instead, we
-    let the dead variable / cpath hang around.  This may cause us to reject
-    good programs (in the presence of loops), but I think it won't cause us to
-    falsely claim that a bad program is good.
-    Keeping the dead cpath is necessary to be able to detect aliases.  E.g., consider the following func:
-    
-        int foo() {
-            int *p2, *p3;
-            {
-                int* p1 = malloc(...); // responsible
-                p2 = p1; // irresponsible
-                p3 = p1; // responsible
-            }
-            free(p3);
-            return *p2;
-        }
-
-    We need to continue to track the relation between p2 and p3 even after p1 dies.
-    The easiest way to do that is just to keep p1 around.
-
-
-borrow_origins contains the following:
- - result of malloc or alloca
- - result of a function call
- - TODO: cpaths starting with "func::args::arg_name", if the function switches it from not-good to good.
-In particular, phi nodes ARE NOT eligible to be in borrow_origins.  Allowing
-phi nodes here (in particular, phi nodes at the beginning of a loop body) can
-cause cycles in the borrow graph (e.g., ptr_swap_in_loop.c) when the loop body is first analyzed.
-On subsequent iterations, eventually we'll know what origins the phi node ultimately borrows from.
-(It should be noted that we use a fixed-point approach; on each iteration thru the basic blocks, 
-if we make a change to borrows_at_end_of_bb, we mark a "dirty" flag to indicate that another 
-iteration is necessary.)
+    let the dead variable hang around.  The reason for this to enable detecting
+    when the address returned by alloca outlives the function.
 
 After splicing the borrow chains as described above, we delete
 every Borrow(to=dest, from=src) where dest or src is a suffix of dead_var.
@@ -288,18 +264,29 @@ the function arguments and return value that escape the function.
 ## Overwriting a memory location holding a borrowed pointer
 
 This is handled the same way as when a variable becomes dead, with the dead cpath instead of dead_var.
-However, definite aliases (is_must_borrow=true) of the memory location should be processed too.
+However, definite location aliases (is_must_borrow=true) of the memory location should be processed too.
+
+
+## Pointer depth
+
+Given a C-path P, we write `ptr_depth(P)` to indicate the pointer depth of P.  For example:
+ - If the type of P is `int`, then ptr_depth(P)=0
+ - If the type of P is `int*`, then ptr_depth(P)=1
+ - If the type of P is `int**`, then ptr_depth(P)=2
+
+## Transitive borrows
+
+We write "borrow+" as an abbreviation of "transitive borrow".
+If there is a direct borrow from p1 to p2, then there is a borrow+ from p1 to p2.
+If there is a borrow+ from p1 to p2 and a borrow+ from p2 to p3, then there is a borrow+ from p1 to p3.
+If there is a borrow+ from p1 to p2, and ptr_depth(p1) >= 2 and ptr_depth(p2) >= 2, then there is a borrow+ from *p1 to *p2.
+If there is a borrow+ from p1 to p2, and p1 and p2 are pointers to struct with a field `fld`, then there is a borrow+ from p1.fld to p2.fld.
 
 
 ## Updating aliases
 
-Once the borrow tracking is implemented, updates to a borrowed pointer should also update aliases.  Care should be taken to respect the MAY semantics of the GOOD, NULL, and ZOMBIE predicates.
+For soundness, we only need to consider aliases of a pointer eligible to be used for writing (i.e., pointer must be mutable and must have no outstanding borrows).
 
-For example (test_null_via_borrow.c):
-    ```
-    int* x = malloc(sizeof(int));
-    int* y = x;
-    if (!y) {abort();}
-    *x = 42;
-    ```
-On the branch where y != NULL, the constraints should also indicate that x != NULL, since y is a MUST borrow of x.
+If there is a borrow from p1 to p2, then ptr_aliases_of(p2) includes p1 and all of ptr_aliases_of(p1).
+If there is a borrow from p1 to p2, then ptr_aliases_of(*p2) includes *p1 and all of ptr_aliases_of(*p1).
+If there is a borrow from p1 to p2, then ptr_aliases_of(p2.fld) includes p1.fld and all of ptr_aliases_of(p1.fld).

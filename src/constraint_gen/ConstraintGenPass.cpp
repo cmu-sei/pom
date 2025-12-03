@@ -1,27 +1,5 @@
 //
-// <legal>
-// Pointer Ownership Model (POM) Source Code Release
-// 
-// Copyright 2025 Carnegie Mellon University.
-// 
-// NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
-// INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
-// UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
-// IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
-// FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
-// OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
-// MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
-// TRADEMARK, OR COPYRIGHT INFRINGEMENT.
-// 
-// Licensed under a MIT (SEI)-style license, please see license.txt or
-// contact permission@sei.cmu.edu for full terms.
-// 
-// [DISTRIBUTION STATEMENT A] This material has been approved for public
-// release and unlimited distribution.  Please see Copyright notice for
-// non-US Government use and distribution.
-// 
-// DM25-1262
-// </legal>
+// <legal></legal>
 //
 
 #include "llvm/Pass.h"
@@ -89,6 +67,23 @@ std::string replace_substr(std::string big_str, const std::string& old_ss, const
     return big_str;
 }
 
+void rtrim_inplace(std::string &s) {
+    // Find the first non-whitespace character from the end
+    auto begin = std::find_if(s.rbegin(), s.rend(),
+        [](unsigned char ch) {
+            return !std::isspace(ch);
+        }
+    ).base();
+    s.erase(begin, s.end());
+}
+
+std::string basename(const std::string& path) {
+    size_t lastSlash = path.find_last_of("/");
+    if (std::string::npos != lastSlash) {
+        return path.substr(lastSlash + 1);
+    }
+    return path;
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // { Code for getting field names of structs
@@ -142,17 +137,21 @@ static uint64_t getFieldOffsetBits(StructType *ST, unsigned FieldIndex, const Da
 }
 
 // Find corresponding DICompositeType for an LLVM StructType
-static DICompositeType *findBestDIForStruct(StructType *ST, Module &M, const DataLayout &DL) {
+static const std::vector<DICompositeType*>& find_DI_for_struct(StructType *ST, Module &M, const DataLayout &DL) {
+  static const std::vector<DICompositeType*> empty_vector; // For early returns
   const uint64_t STSizeBits = DL.getTypeAllocSizeInBits(ST);
   const unsigned NumElems   = ST->getNumElements();
   if (!ST->hasName()) {
-    return nullptr;
+    return empty_vector;
   }
   const std::string IRName  = stripStructTagPrefix(ST->getName());
 
-  static std::map<std::string, DICompositeType*> cache;
-  if (cache.count(IRName)) {
-    return cache[IRName];
+  static std::map<std::string, std::vector<DICompositeType*>> cache;
+  
+  // Check cache first - return reference to cached entry
+  auto it = cache.find(IRName);
+  if (it != cache.end()) {
+    return it->second;
   }
 
   DebugInfoFinder DIF;
@@ -160,6 +159,8 @@ static DICompositeType *findBestDIForStruct(StructType *ST, Module &M, const Dat
 
   DICompositeType *Best = nullptr;
   int BestScore = -1;
+
+  std::vector<DICompositeType*> ret;
 
   for (DIType *T : DIF.types()) {
     auto *CT = dyn_cast<DICompositeType>(T);
@@ -172,33 +173,31 @@ static DICompositeType *findBestDIForStruct(StructType *ST, Module &M, const Dat
     DINodeArray Elems        = CT->getElements();
     unsigned DIMemberCount   = 0;
     for (auto *N : Elems) {
-      if (isa<DIDerivedType>(N) && cast<DIDerivedType>(N)->getTag() == dwarf::DW_TAG_member)
+      if (isa<DIDerivedType>(N) && cast<DIDerivedType>(N)->getTag() == dwarf::DW_TAG_member) {
         ++DIMemberCount;
+      }
     }
 
-    // Score match quality
-    int Score = 0;
-    if (DISzBits == STSizeBits) Score += 2;
-    if (DIMemberCount == NumElems) Score += 1;
+    bool has_mismatched = false;
     if (!IRName.empty() && !DIName.empty() && IRName == DIName) {
-        if (Best) {
-            errs() << "Warning: found more than one matching struct for '" << IRName << "'\n";
-        }
         if (DISzBits != STSizeBits) {
-            errs() << "Warning: mismatch in size for struct for '" << IRName << "'\n";
+            has_mismatched = true;
+            continue;
         }
         if (DIMemberCount != NumElems) {
-            errs() << "Warning: mismatch in number of elements for struct for '" << IRName << "'\n";
+            has_mismatched = true;
+            continue;
         }
-        if (Score > BestScore) {
-          BestScore = Score;
-          Best = CT;
-        }
+        ret.push_back(CT);
+    }
+    if (ret.size() == 0 && has_mismatched) {
+        errs() << "Warning: No matching struct DI info for struct '" << IRName << "' was found, "
+               << "but mismatched (in element count and/or size in bits) DI info was found.\n";
     }
   }
 
-  cache[IRName] = Best;
-  return Best;
+  cache[IRName] = std::move(ret);  // Move to avoid copy
+  return cache[IRName];
 }
 
 static std::string pickFieldNameByOffset(DICompositeType *CT, uint64_t OffsetBits) {
@@ -214,15 +213,6 @@ static std::string pickFieldNameByOffset(DICompositeType *CT, uint64_t OffsetBit
   return {};
 }
 
-static std::string distructName(DICompositeType *CT, StructType *ST) {
-  if (CT && !CT->getName().empty())
-    return CT->getName().str();
-  // Fallback to IR name (stripped) if DI is missing/unnamed
-  if (ST && ST->hasName())
-    return stripStructTagPrefix(ST->getName());
-  return {};
-}
-
 } // namespace
 
 // === Public API ===
@@ -230,6 +220,7 @@ static std::string distructName(DICompositeType *CT, StructType *ST) {
 // On failure, returns best-effort fallbacks (e.g., IR struct name and "field#N") or empty strings.
 std::pair<std::string, std::string>
 get_GEP_field_info(const GetElementPtrInst *GEP) {
+  static std::set<std::string> already_warned;
   if (!GEP) return {"", ""};
 
   const Function *F = GEP->getFunction();
@@ -246,28 +237,42 @@ get_GEP_field_info(const GetElementPtrInst *GEP) {
   }
 
   StructType *ST = SI->ST;
+  if (!ST->hasName()) {
+    return {"", ""};
+  }
+  const std::string StructName = stripStructTagPrefix(ST->getName());
   const unsigned FieldIndex = SI->FieldIndex;
   if (FieldIndex >= ST->getNumElements()) {
     // Out-of-range; nothing we can do.
-    return {stripStructTagPrefix(ST->getName()), ""};
+    return {StructName, ""};
   }
 
   // 2) Compute the byte/bit offset of that field.
   const uint64_t FieldOffBits = getFieldOffsetBits(ST, FieldIndex, DL);
 
   // 3) Find matching DICompositeType and the member at that offset.
-  DICompositeType *CT = findBestDIForStruct(ST, *M, DL);
-  const std::string StructName = distructName(CT, ST);
-  std::string FieldName = pickFieldNameByOffset(CT, FieldOffBits);
+  const std::vector<DICompositeType*>& CT_cands = find_DI_for_struct(ST, *M, DL);
+  std::set<std::string> cand_field_names;
+  for (DICompositeType* CT : CT_cands) {
+    std::string CandFieldName = pickFieldNameByOffset(CT, FieldOffBits);
+    cand_field_names.insert(CandFieldName);
+  }
+  if (cand_field_names.size() != 1) {
+    if (already_warned.count(StructName) == 0) {
+        already_warned.insert(StructName);
+        if (cand_field_names.size() == 0) {
+            errs() << "Warning: No struct info found for struct '" << StructName << "'\n";
+        } else {
+            errs() << "Warning: Conflicting struct info found for struct '" << StructName << "'\n";
+        }
+    }
+  }
+  std::string FieldName;
+  if (cand_field_names.size() > 0) {
+    FieldName = *cand_field_names.begin();
+  }
 
-  // 4) Fallbacks if DI is partial/missing.
-  std::string FinalStruct = StructName.empty() ? stripStructTagPrefix(ST->getName()) : StructName;
-  //if (FieldName.empty()) {
-  //  // As a readable fallback, use "field#N".
-  //  FieldName = ("field#" + std::to_string(FieldIndex));
-  //}
-
-  return {FinalStruct, FieldName};
+  return {StructName, FieldName};
 }
 //////////////////////////////////////////////////////////////////////////////
 // } End of code for getting field names of structs
@@ -336,11 +341,15 @@ static cl::opt<bool> DebugLiveness(
 static cl::opt<bool> WholeProg(
     "whole-prog",
     cl::desc("Whole-program analysis, iterating until a fixed point is reached."),
-    cl::init(true));
+    cl::init(false));
 static cl::opt<bool> GloUniq(
     "glo-uniq",
     cl::desc("Use globally unique variable names (as opposed to per-function unique); this is now always on."),
     cl::init(true));
+static cl::opt<bool> CheckPomComplete(
+    "check-pom-complete",
+    cl::desc("Check that the '.pom.yml' file is complete"),
+    cl::init(false));
 static cl::opt<std::string> ArgNameFile(
     "arg-name-file",
     cl::desc("File with names of arguments of std lib funcs"),
@@ -431,7 +440,6 @@ struct BorrowInfo {
     std::set<Borrow, BorrowLessThanByDestThenSrc> borrows_by_dest;
     std::map<CPathPart /*base_var*/, bool> is_dyn_exclusive; // Whether only a single borrow exists dynamically for base_var.
     std::map<Borrow, bool, BorrowLessThanBySrcThenDest> is_must_borrow; // Whether this borrow is known to definitely be in effect.
-    std::set<CPath> borrow_origins;
     std::set<CPath> waiting_to_die;
 
     void add(Borrow borrow) {
@@ -439,16 +447,16 @@ struct BorrowInfo {
         borrows_by_dest.insert(borrow);
     }
 
-    bool get_is_dyn_exclusive(CPathPart base_var, bool default_val) {
+    bool get_is_dyn_exclusive(CPathPart base_var, bool default_val) const {
         auto it = is_dyn_exclusive.find(base_var);
         return (it != is_dyn_exclusive.end()) ? it->second : default_val;
     }
-
-    void add_origin_for_borrow(CPath origin) {
-        /* TODO: rename existing origin of same name */
-        borrow_origins.insert(origin);
-    }
     
+    bool get_is_must_borrow(const Borrow& b) const {
+        auto it = is_must_borrow.find(b);
+        return (it != is_must_borrow.end()) ? it->second : false;
+    };
+
     bool operator==(const BorrowInfo& other) const {
         // Only need to check one borrow set since they contain the same elements
         if (borrows_by_src != other.borrows_by_src) return false;
@@ -519,6 +527,7 @@ inline bool does_borrow_add_cycle(const Borrow& borrow, const BorrowInfo& curBI)
 
 
 #define MAX_PTR_DEPTH 6
+#define MAX_CPATH_DEPTH 8
 
 // Shared implementation class that contains all the core logic
 class ConstraintGenImpl {
@@ -526,23 +535,34 @@ public:
     std::ofstream outFile;
     std::ofstream numirFile;
     std::set<std::string> seenCPaths; // Track C-paths that appear in constraints
+    std::set<GlobalValue*> seen_globals;
     std::map<std::string, Value*> cpathToValue; // Inverse of getCPath
     std::map<Instruction*, unsigned> instToId; // Map instructions to unique IDs
     std::map<Value*, std::string> valueToSourceName; // Map LLVM values to source variable names
     std::map<Value*, unsigned> valueToVarId; // Map LLVM values to unique variable IDs
     std::set<std::string> argNameSet;
+    std::set<std::string> argsToRealloc;
+    std::set<Function*> already_renamed_func_values;
+    bool already_renamed_cur_func_values;
 
     std::map<Instruction*, std::vector<Value*>> lastUseIn;  // lastUseIn[inst] is list of values that are not used again after inst.
     std::map<BasicBlock*, std::set<Value*>> liveAtStartSet; // liveAtStart[bb] indicates the values that are live at the start of bb.
+    std::map<BasicBlock*, std::set<Value*>> liveAtEndSet;   // liveAtEnd[bb] indicates the values that are live at the end of bb.
     std::set<Value*> currentLiveVars;
     Function* curFunc;
     Instruction* curInstruction;
     unsigned curInstructionID;
     
+    std::vector<std::string> pomPropLines;
+    std::map<std::string, std::string> pomDepMutRet;
     std::unordered_set<std::string> pomFuncs;
+    std::unordered_set<std::string> pomCPaths;
     std::map<std::string, std::map<std::string, std::set<std::string>>> pomBorrows;
+    std::vector<std::string> pomMissingErrors;
     // pomBorrows[func_name][dest] = {sources from which dest borrows}
     bool hasUpdatedBorrows; // Whether pomBorrows has been updated
+    
+    std::set<std::string> seen_unsupported; // Unsupported features that we've seen.
 
     std::map<std::string, std::vector<std::string>> funcArgName;
 
@@ -566,16 +586,19 @@ public:
 
     void reset_at_end_of_func() {
         seenCPaths.clear();
+        seen_globals.clear();
         cpathToValue.clear();
-        instToId.clear();
+        //instToId.clear();
         valueToSourceName.clear();
-        valueToVarId.clear();
+        //valueToVarId.clear();
         argNameSet.clear();
         lastUseIn.clear();
         liveAtStartSet.clear();
+        liveAtEndSet.clear();
         currentLiveVars.clear();
         curFunc = nullptr;
         firstUseOfCall.clear();
+        already_renamed_cur_func_values = false;
     }
 
     struct PtrCopyArgs {
@@ -586,6 +609,10 @@ public:
         std::string stmtPostDest;
         Instruction* inst;
     };
+
+    void add_seen_cpath_str(std::string cpath_str) {
+        seenCPaths.insert(cpath_str);
+    }
 
     void add_borrow(Borrow borrow, bool* adds_cycle) {
         if (does_borrow_add_cycle(borrow, curBI)) {
@@ -662,40 +689,29 @@ public:
     }
 
     std::string cpath_to_str(const CPath& cpath, bool use_stars=true) {
+        // Count trailing derefs
+        size_t trailing_derefs = 0;
+        if (use_stars) {
+            for (size_t i = cpath.size(); i > 1; i--) {
+                if (cpath[i - 1] == DEREF_PART_ID) {
+                    trailing_derefs++;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Build string for non-trailing parts (base var + middle parts)
         std::vector<std::string> cpath_str_vec;
-        cpath_str_vec.reserve(cpath.size());
+        size_t non_trailing_size = cpath.size() - trailing_derefs;
+        cpath_str_vec.reserve(non_trailing_size);
         size_t total_size = 0;
 
-        size_t cpath_size = cpath.size();
-        bool allStars = true;
-        for (size_t i=1; i < cpath.size(); i++) {
-            if (cpath[i] != DEREF_PART_ID) {
-                allStars = false;
-                break;
-            }
-        }
-        if (allStars && use_stars) {
-            auto it = cpath_part_id_to_str.find(cpath[0]);
+        for (size_t i = 0; i < non_trailing_size; i++) {
+            auto it = cpath_part_id_to_str.find(cpath[i]);
             std::string part_str;
             if (it == cpath_part_id_to_str.end()) {
-                errs() << "Error: Unknown cpath part ID " << cpath[0] << "\n";
-                part_str = "???";
-            } else {
-                part_str = it->second;
-            }
-            std::string result;
-            result.reserve(cpath_size + part_str.length());
-            for (size_t i = 1; i < cpath.size(); i++) {
-                result += "*";
-            }
-            result += part_str;
-            return result;
-        }
-        for (const CPathPart part_id : cpath) {
-            auto it = cpath_part_id_to_str.find(part_id);
-            std::string part_str;
-            if (it == cpath_part_id_to_str.end()) {
-                errs() << "Error: Unknown cpath part ID " << part_id << "\n";
+                errs() << "Error: Unknown cpath part ID " << cpath[i] << "\n";
                 part_str = "???";
             } else {
                 part_str = it->second;
@@ -703,13 +719,18 @@ public:
             cpath_str_vec.push_back(part_str);
             total_size += part_str.size();
         }
-        
-        std::string result;
-        result.reserve(total_size + 1);
 
+        // Build result with stars prefix
+        std::string result;
+        result.reserve(trailing_derefs + total_size);
+
+        for (size_t i = 0; i < trailing_derefs; i++) {
+            result += "*";
+        }
         for (const std::string& s : cpath_str_vec) {
             result += s;
         }
+
         return result;
     }
 
@@ -768,7 +789,7 @@ public:
                 } else {
                     out << ", ";
                 }
-                out << cpath_to_str(b.to);
+                out << cpath_to_str(b.to) << (bi.get_is_must_borrow(b) ? " (!)" : " (?)");
             }
             if (in_group) {
                 out << "}\n";
@@ -797,7 +818,7 @@ public:
                 } else {
                     out << ", ";
                 }
-                out << cpath_to_str(b.from);
+                out << cpath_to_str(b.from) << (bi.get_is_must_borrow(b) ? " (!)" : " (?)");
             }
             if (in_group) {
                 out << "}\n";
@@ -874,16 +895,24 @@ public:
             return;
         }
 
+        std::string file_basename = basename(filename);
+
         int line_num = 0;
         std::string line;
         
+        std::regex pat_mut_arg("^mut[(]([A-Za-z0-9_]+)[)]");
+
         std::regex pattern(
-            "^([!]?)(\\w+)[(]([*]*)([A-Za-z0-9_:.\\[\\]-]+)(, ([A-Za-z0-9_:.*\\[\\]-]+))?[)]");
-            /*  {neg}{pred}[(]{stars}{     var      }(, {     time      })?[)] */
+            "^([!]?)(\\w+)[(]([*]*)([A-Za-z0-9_:.\\[\\]-]+)(, ([A-Za-z0-9_:.*\\[\\]-]+))?[)]( += +([^#]*))?(#.*)?");
+            /*  {neg}{pred}[(]{stars}{     var      }(, {     time      })?[)]( = expr)? */
         while (std::getline(file, line)) {
             line_num++;
             std::smatch matches;
             if (line == "<yaml_file>" || line == "</yaml_file>") {
+                continue;
+            }
+            if (line.length() > 1 && line[0] == '#') {
+                // Skip comment line.
                 continue;
             }
             if (std::regex_match(line, matches, pattern)) {
@@ -892,11 +921,39 @@ public:
                 std::string stars = matches[3].str();
                 std::string var   = matches[4].str();
                 std::string time  = matches[6].str(); // matches[5] include the ", " part.
+                std::string rhs   = matches[8].str(); // matches[7] include the " = " part.
                 std::string func_name = get_func_name_of_base_var(var);
                 pomFuncs.insert(func_name);
-                if (pred == std::string("borrows_from")) {
+                pomCPaths.insert(stars+var);
+                if (!rhs.empty()) {
+                    rtrim_inplace(rhs);
+                    if (rhs == std::string("missing!")) {
+                        pomMissingErrors.push_back(file_basename + ":" + std::to_string(line_num) + ": missing data for " + pred + "(" + stars + var + ")");
+                        continue;
+                    }
+                    if (pred != std::string("mut")) {
+                        errs() << "Error on line " << line_num << " of " << filename << ": only supported for 'mut' so far.\n";
+                        continue;
+                    }
+                    if (!has_suffix(var, "::return")) {
+                        errs() << "Error on line " << line_num << " of " << filename << ": only supported for 'func::return' so far.\n";
+                        continue;
+                    }
+                    std::smatch rhs_matches;
+                    if (!std::regex_match(rhs, rhs_matches, pat_mut_arg)) {
+                        errs() << "Error on line " << line_num << " of " << filename << ": invalid right-hand side (RHS).\n";
+                        continue;
+                    }
+                    std::string arg = rhs_matches[1].str();
+                    //errs() << "RHS: mut(" << arg << ")\n";
+                    pomDepMutRet[func_name] = arg;
+                }
+                else if (pred == std::string("borrows_from")) {
                     pomBorrows[func_name][stars+var].insert(time);
                     //errs() << "pomBorrows[\"" << func_name << "\"][\"" << (stars+var) << "\"].insert(\"" << time << "\")\n";
+                }
+                else {
+                    pomPropLines.push_back(line);
                 }
             } else {
                 errs() << "Error parsing line " << line_num << " of " << filename << "!\n";
@@ -906,19 +963,22 @@ public:
         outs() << "Finished reading POM props file " << filename << "\n";
     }
 
-    void computeLiveness(
+   void computeLiveness(
         Function &F,
         std::map<Value*, size_t> &valueToNum,
         std::map<BasicBlock*, bitvector> &liveAtStart,
+        std::map<BasicBlock*, bitvector> &liveAtEnd,
         std::map<Instruction*, std::vector<Value*>> &lastUseIn)
     {
         // valueToNum[val] indicates the position in the bitvector indicating whether val is live.
         // liveAtStart[bb] indicates the values that are live at the start of bb.
+        // liveAtEnd[bb] indicates the values that are live at the end of bb.
         // lastUseIn[inst] is list of values that are not used again after inst.
 
         std::map<std::string, std::vector<Value*>> origVarNameToValues;
         valueToNum.clear();
         liveAtStart.clear();
+        liveAtEnd.clear();
         lastUseIn.clear();
 
         // Step 1: Collect all pointer values and assign them numbers
@@ -953,6 +1013,7 @@ public:
         // Step 2: Initialize bitvectors for each basic block
         for (auto &bb : F) {
             liveAtStart[&bb] = bitvector(numPointerValues);
+            liveAtEnd[&bb] = bitvector(numPointerValues);
         }
 
         if (numPointerValues == 0) {
@@ -1049,6 +1110,9 @@ public:
                 liveOut |= liveAtStart[succ];
             }
             
+            // Store live-out (live at end of block)
+            liveAtEnd[bb] = liveOut;
+            
             // Compute new live-in: (live-out - kill) ∪ gen
             bitvector newLiveIn = liveOut;
             
@@ -1076,11 +1140,8 @@ public:
 
         // Step 5: Compute lastUseIn by analyzing last uses within each block
         for (auto &bb : F) {
-            // Compute live-out for this block
-            bitvector currentlyLive(numPointerValues);
-            for (auto *succ : successors(&bb)) {
-                currentlyLive |= liveAtStart[succ];
-            }
+            // Get live-out for this block (already computed and stored)
+            bitvector currentlyLive = liveAtEnd[&bb];
             
             // Process instructions in reverse order
             for (auto I = bb.rbegin(); I != bb.rend(); ++I) {
@@ -1113,16 +1174,16 @@ public:
                 }
             }
         }
-        
     }
-    
+
     void do_liveness(Function &F) {
         bool dbg = DebugLiveness;
         std::map<BasicBlock*, bitvector> liveAtStartBV;
+        std::map<BasicBlock*, bitvector> liveAtEndBV;
         std::map<Value*, size_t> valueToNum; 
         std::vector<Value*> numToValue;
 
-        computeLiveness(F, valueToNum, liveAtStartBV, lastUseIn);
+        computeLiveness(F, valueToNum, liveAtStartBV, liveAtEndBV, lastUseIn);
 
         if (dbg) outs() << "BEGIN number-to-value mapping for " << F.getName().str() << "\n";
         numToValue.resize(valueToNum.size(), nullptr);
@@ -1151,6 +1212,24 @@ public:
         }
         if (dbg) outs() << "END liveAtStart\n";
 
+        if (dbg) outs() << "BEGIN liveAtEnd for " << F.getName().str() << "\n";
+        for (const auto& pair : liveAtEndBV) {
+            BasicBlock* bb = pair.first;
+            bitvector bv = pair.second;
+            std::set<Value*> liveVals;
+            if (dbg) outs() << "  " << bb->getName().str() << ": ";
+            for (int i=0; i < bv.size(); i++) {
+                if (bv.read(i)) {
+                    Value* val = numToValue[i];
+                    liveVals.insert(val);
+                    if (dbg) outs() << getCPath(*val) << " ";
+                }
+            }
+            if (dbg) outs() << "\n";
+            liveAtEndSet[bb] = liveVals;
+        }
+        if (dbg) outs() << "END liveAtEnd\n";
+
         if (dbg) {
             outs() << "BEGIN lastUseIn for " << F.getName().str() << "\n";
             for (const auto& pair : lastUseIn) {
@@ -1166,7 +1245,7 @@ public:
                     errs() << "\n";
                 }
             }
-            outs() << "END lastUseIn\n";
+            outs() << "END lastUseIn\n\n";
         }
     }
 
@@ -1221,13 +1300,6 @@ public:
             curBI.is_must_borrow[b] = result;
         }
 
-        // Union all borrow_origins from incoming
-        for (BorrowInfo* bi : incoming) {
-            for (const CPath& cpath : bi->borrow_origins) {
-                curBI.borrow_origins.insert(cpath);
-            }
-        }
-        
         // Union all waiting_to_die from incoming
         for (BorrowInfo* bi : incoming) {
             for (const CPath& cpath : bi->waiting_to_die) {
@@ -1271,17 +1343,15 @@ public:
             }
         }
         
-        if (borrows_from_dead.size() == 0 and borrows_to_dead.size() == 0) {
+        if (borrows_from_dead.size() == 0 && borrows_to_dead.size() == 0) {
             // Nothing to do, so just leave.
             return;
         }
 
-        //if (borrows_to_dead.size() == 0 and curBI.borrow_origins.count(dead_cpath) != 0) {
-        //    return;
-        //}
         Value* dead_LLVM = cpathToValue[cpath_part_id_to_str[dead_cpath[0]]];
         bool is_phi = dead_LLVM != nullptr && isa<PHINode>(dead_LLVM);
-        if (borrows_to_dead.size() == 0 && !is_phi && !force_kill) {
+        bool is_alloca = dead_LLVM != nullptr && isa<AllocaInst>(dead_LLVM);
+        if (is_alloca && borrows_to_dead.size() == 0 && !is_phi && !force_kill) {
             if (borrows_from_dead.size() > 0) {
                 if (dead_cpath.size() == 1) {
                     CPathPart renamed_dead_base_var = rename_dead_basevar_in_borrows(dead_cpath[0]);
@@ -1473,11 +1543,9 @@ public:
         return false;
     }
 
-
     bool runOnModule(Module &M) {
-        bool modified = false;
         
-        for (int i=0; i < 100; i++) {
+        for (int i=0; ; i++) {
             hasUpdatedBorrows = false;
             for (Function &F : M) {
                 if (F.isDeclaration()) {
@@ -1488,6 +1556,10 @@ public:
             if (!hasUpdatedBorrows || !WholeProg) {
                 break;
             }
+            if (i >= 100) {
+                errs() << "Error: maximum iterations exceeded; exiting!\n";
+                break;
+            }
             if (outFile.is_open()) {
                 outFile.close();
             }
@@ -1495,8 +1567,28 @@ public:
                 numirFile.close();
             }
         }
+        if (CheckPomComplete) {
+            outFile << "<common>\n";
+            for (std::string& missing : pomMissingErrors) {
+                outFile << "false # " << missing << "\n";
+            }
+            outFile << "</common>\n";
+        }
+        outFile << "<yaml_file>\n";
+        for (std::string line : pomPropLines) {
+            outFile << line << "\n";
+        }
+        outFile << "</yaml_file>\n";
+        if (seen_unsupported.size()) {
+            outFile << "# UNSUPPORTED_FEATURES: [";
+            for (const std::string& feat : seen_unsupported) {
+                outFile << " " << feat;
+            }
+            outFile << " ]\n";
+        }
 
-        return false;
+        bool modified = true;
+        return modified;
     }
     
     bool runOnFunction(Function &F) {
@@ -1505,16 +1597,19 @@ public:
             return false;
         }
         
-        if (!outFile.is_open()) {
+        bool already_opened = outFile.is_open();
+        if (!already_opened) {
             outFile.open(OutputFile, std::ios::out);
         }
         if (!outFile.is_open()) {
             errs() << "Error: Cannot open output file " << OutputFile << "\n";
             return false;
         }
-        outFile << "<common>\n";
-        outFile << "!false\n";
-        outFile << "</common>\n\n";
+        if (!already_opened) {
+            outFile << "<common>\n";
+            outFile << "!false\n";
+            outFile << "</common>\n\n";
+        }
         
         if (!NumberedIR.empty()) {
             if (!numirFile.is_open()) {
@@ -1566,7 +1661,9 @@ public:
         for (BasicBlock &BB : F) {
             for (Instruction &I : BB) {
                 if (!isDbgIntrinsic(I)) {
-                    instToId[&I] = nextInstId++;
+                    if (instToId.count(&I) == 0) {
+                        instToId[&I] = nextInstId++;
+                    }
                 }
                 if (isDbgIntrinsic(I)) {
                     DILocalVariable* DI_var = nullptr;
@@ -1600,6 +1697,9 @@ public:
                 isDirty = false;
                 for (PHINode* phi : curList) {
                     if (!phi->getType()->isPointerTy()) {
+                        continue;
+                    }
+                    if (get_phi_origin_metadata(phi) == std::string("indirect_call_expansion")) {
                         continue;
                     }
                     std::set<std::string> varNames;
@@ -1646,6 +1746,42 @@ public:
             }
         }
         
+        bool is_first_time = false;
+
+        // Rename instruction results
+        if (!already_renamed_func_values.count(curFunc)) {
+            is_first_time = true;
+            already_renamed_cur_func_values = false;
+            //errs() << "Renaming instruction results for function...\n";
+            std::vector<std::pair<Value*, std::string>> new_value_names;
+            for (BasicBlock &BB : F) {
+                for (Instruction &I : BB) {
+                    if (!isDbgIntrinsic(I)) {
+                        if (!I.getType()->isVoidTy()) {
+                            new_value_names.push_back({&I, getCPath(I)});
+                        }
+                        //for (const llvm::Use &U : I.operands()) {
+                        //    Value* operand = U.get();
+                        //    new_value_names.push_back({operand, getCPath(*operand)});
+                        //}
+                    }
+                }
+            }
+            for (auto inst_and_name : new_value_names) {
+                Value* inst = inst_and_name.first;
+                std::string new_name = inst_and_name.second;
+                inst->setName(new_name);
+                //errs() << new_name << ": ";
+                //inst->dump();
+            }
+            already_renamed_func_values.insert(curFunc);
+            //errs() << "Done renaming instruction results for function.\n";
+        } else {
+            //errs() << "Already renamed instruction results for function " << curFunc->getName().str() << "\n";
+        }
+        already_renamed_cur_func_values = true;
+
+
         if (!DisableLiveness) {
             do_liveness(F);
         }
@@ -1657,7 +1793,7 @@ public:
             outFile << "null(NULL_CONST, " << start << ")\n";
             outFile << "!good(NULL_CONST, " << start << ")\n";
             outFile << "!zombie(NULL_CONST, " << start << ")\n";
-            seenCPaths.insert(std::string("NULL_CONST"));
+            add_seen_cpath_str(std::string("NULL_CONST"));
         }
 
         // Process instructions and generate constraints
@@ -1682,15 +1818,17 @@ public:
                 argNameSet.insert(argName);
                 std::string func__args__arg = funcName + "::args::" + arg->getName().str();
                 DILocalVariable* DI_var = arg_to_DI_var[i];
-                if (!DI_var) {
+                int ptr_level = 0;
+                if (DI_var) {
+                    ptr_level = countPointerIndirectionFromDI(DI_var->getType());
+                } else {
                     if (!isDryRun) {
-                        errs() << "Error: missing debug info for argument " << i << " of function " << funcName << "!\n";
+                        errs() << "Warning: missing debug info for argument " << i << " of function " << funcName << "!\n";
                     }
-                    continue;
+                    ptr_level = (arg->getType()->isPointerTy() ? 1 : 0);
                 }
-                int ptr_level = countPointerIndirectionFromDI(DI_var->getType());
                 if (ptr_level > 0) {
-                    seenCPaths.insert(argName);
+                    add_seen_cpath_str(argName);
                     if (!isDryRun) {
                         outFile << "# Argument " << arg->getName().str() << "\n";
                         outFile << "!responsible(" << argName << ") | responsible(" << func__args__arg << ")\n";
@@ -1703,12 +1841,17 @@ public:
                         outFile << "null(" << argName << ", start) | !null(" << func__args__arg << ", start)\n";
                         outFile << "!zombie(" << argName << ", start) | zombie(" << func__args__arg << ", start)\n";
                         outFile << "zombie(" << argName << ", start) | !zombie(" << func__args__arg << ", start)\n";
+                        if (is_first_time) {
+                            if (!pomCPaths.count(func__args__arg)) {
+                                pomMissingErrors.push_back("Missing in '.pom.yml' file: " + func__args__arg);
+                            }
+                        }
                     }
                 }
                 std::string starPfx = "*";
                 std::string fakeDerefSfx = "<0>";
                 for (int i=1; i < ptr_level; i++) {
-                    seenCPaths.insert(starPfx + argName);
+                    add_seen_cpath_str(starPfx + argName);
                     arg_dummy_borrows.push_back((Borrow){
                         .to = parse_cpath(starPfx + argName),
                         .from = parse_cpath(argName + ":@orig" + fakeDerefSfx)
@@ -1726,10 +1869,24 @@ public:
                             outFile << "!zombie(" << starPfx << argName << ", " << timePt << ") | zombie(" << starPfx << func__args__arg << ", " << timePt << ")\n";
                             outFile << "zombie(" << starPfx << argName << ", " << timePt << ") | !zombie(" << starPfx << func__args__arg << ", " << timePt << ")\n";
                         }
+                        if (is_first_time) {
+                            if (!pomCPaths.count(starPfx + func__args__arg)) {
+                                pomMissingErrors.push_back("Missing in '.pom.yml' file: " + starPfx + func__args__arg);
+                            }
+                        }
                     }
                     starPfx += "*";
                     fakeDerefSfx += "<0>";
                 }
+                // In case the program uses casts to get further levels of indirection,
+                // treat the next level of indirection as starting in a garbage state.
+                {
+                    std::string timePt = "start";
+                    outFile << "zombie(" << starPfx << argName << ", " << timePt << ") # Try to flag exceeding declared pointer depth\n";
+                }
+            }
+            if (pomDepMutRet.count(curFunc->getName().str())) {
+                outFile << "false # Cannot yet verify user-defined functions with dependent mutability\n";
             }
             
             for (BasicBlock &BB : F) {
@@ -1750,6 +1907,7 @@ public:
                 if (&BB == &curFunc->getEntryBlock()) {
                     for (Borrow& borrow : arg_dummy_borrows) {
                         add_borrow(borrow, nullptr);
+                        curBI.is_must_borrow[borrow] = true;
                     }
                 }
 
@@ -1761,15 +1919,12 @@ public:
                 //    errs() << "Looking at predecessors of BB " << BB.getName().str() << "\n";
                 //}
                 for (BasicBlock* pred_bb : predecessors(&BB)) {
+                    // We need to include the variables live at the pred BB start to handle realloc weirdness.
                     std::set<Value*>& liveAtCurPred = liveAtStartSet[pred_bb];
-                    //if (!isDryRun) {
-                    //    errs() << "Live at start of predecessor " << pred_bb->getName().str() << ":";
-                    //    for (Value* liveVar : liveAtCurPred) {
-                    //        errs() << " " << getCPath(*liveVar);
-                    //    }
-                    //    errs() << "\n";
-                    //}
                     liveAtAnyPred.insert(liveAtCurPred.begin(), liveAtCurPred.end());
+
+                    std::set<Value*>& liveAtCurPredEnd = liveAtEndSet[pred_bb];
+                    liveAtAnyPred.insert(liveAtCurPredEnd.begin(), liveAtCurPredEnd.end());
                 }
                 currentLiveVars = liveAtStartSet[&BB];
                 
@@ -1810,6 +1965,9 @@ public:
                             std::string bbPre = getStatementLabel(*first_inst, "pre");
                             // responsible(x) -> !good(x, S-pre)
                             outFile << "!responsible(" << cpath << ") | !good(" << cpath << ", " << bbPre << ") # killed_var\n";
+                            if (isa<AllocaInst>(var) && seenCPaths.count(std::string("*") + cpath)) {
+                                outFile << "!responsible(*" << cpath << ") | !good(*" << cpath << ", " << bbPre << ") # Death of good resp ptr causes a mem leak\n"; /* pri_cat=mem_leak */
+                            }
                         }
                     }
                 }
@@ -1839,7 +1997,7 @@ public:
                         //outFile << "# Instruction '" << std::string(I.getOpcodeName()) << "': " << getStatementLabel(I, "") << "\n";
                         outFile << "\n<instruction opcode=\"" << std::string(I.getOpcodeName()) << "\" ";
                         if (CallInst *CI = dyn_cast<CallInst>(&I)) {
-                            if (Function *F = CI->getCalledFunction()) {
+                            if (Function *F = getCalledFunc(CI)) {
                                 outFile << "callee=\"" << F->getName().str() << "\" ";
                             }
                         }
@@ -1850,13 +2008,13 @@ public:
                             I.print(rso);
                             static const std::regex pattern(", !dbg ![0-9]+");
                             instStr = std::regex_replace(instStr, pattern, "");
-                            std::string varNameEq;
-                            if (has_nondummy_uses(&I)) {
-                                varNameEq = getCPath(I) + " = ";
-                            }
-                            if (varNameEq.length() < 14) {
-                                varNameEq.append(14 - varNameEq.length(), ' ');
-                            }
+                            //std::string varNameEq;
+                            //if (has_nondummy_uses(&I)) {
+                            //    varNameEq = getCPath(I) + " = ";
+                            //}
+                            //if (varNameEq.length() < 14) {
+                            //    varNameEq.append(14 - varNameEq.length(), ' ');
+                            //}
                             std::string line_num_str;
                             if (const DebugLoc &DL = I.getDebugLoc()) {
                                 int line_num = DL.getLine();
@@ -1864,7 +2022,8 @@ public:
                                     line_num_str = "  // Line " + std::to_string(line_num);
                                 }
                             }
-                            numirFile << "  I" << instToId[&I] << ":\t" << varNameEq << instStr << line_num_str << "\n";
+                            //numirFile << "  I" << instToId[&I] << ":\t" << varNameEq << instStr << line_num_str << "\n";
+                            numirFile << "  I" << instToId[&I] << ":\t" << instStr << line_num_str << "\n";
                         }
                     }
                     processInstruction(I);
@@ -1882,7 +2041,6 @@ public:
                                 }
                             }
                             for (Value* killedVar : itLastUse->second) {
-                                currentLiveVars.erase(killedVar);
                                 std::string cpath = getCPath(*killedVar);
                                 if (!DisableBorrowChecks) {
                                     bool is_br_cmp = isa<ICmpInst>(&I) && isa<BranchInst>(I.getNextNonDebugInstruction());
@@ -1892,10 +2050,17 @@ public:
                                         handleCPathBecomingDead(parse_cpath(cpath));
                                     }
                                 }
-                                if (!DisableMemLeak && !bb_ends_in_unreachable) {
+                                bool is_arg_to_realloc = argsToRealloc.count(cpath);
+                                if (!is_arg_to_realloc) {
+                                    currentLiveVars.erase(killedVar);
+                                }
+                                if (!DisableMemLeak && !bb_ends_in_unreachable && !is_arg_to_realloc) {
                                     if (!isDryRun) {
                                         std::string stmtPost = getStatementLabel(I, "post");
                                         outFile << "!responsible(" << cpath << ") | !good(" << cpath << ", " << stmtPost << ") # Death of good resp ptr causes a mem leak\n"; /* pri_cat=mem_leak */
+                                        if (isa<AllocaInst>(trace_thru_GEP(killedVar)) && seenCPaths.count(std::string("*") + cpath)) {
+                                            outFile << "!responsible(*" << cpath << ") | !good(*" << cpath << ", " << stmtPost << ") # Death of good resp ptr causes a mem leak\n"; /* pri_cat=mem_leak */
+                                        }
                                     }
                                 }
                             }
@@ -1907,6 +2072,7 @@ public:
                                 std::string argName = getArgName(arg);
                                 if (!isDryRun) {
                                     std::string stmtPost = getStatementLabel(I, "post");
+                                    assert(stmtPost == std::string("end"));
                                     outFile << "!responsible(" << argName << ") | !good(" << argName << ", " << stmtPost << ") # Death of good resp ptr causes a mem leak\n"; /* pri_cat=mem_leak */
                                 }
                             }
@@ -1950,14 +2116,30 @@ public:
                                 std::string arg;
                                 int deref_count = -1;
                                 std::string src_base = cpath_part_id_to_str[borrow.from[0]];
+                                Borrow new_borrow;
                                 if (std::regex_match(src_base, matches, pattern)) {
                                     std::string src_str = cpath_to_str(borrow.from, false);
                                     src_str = replace_substr(src_str, ":@orig", "");
                                     src_str = rename_transformed_cpath_back(src_str);
                                     CPath src_cpath = parse_cpath(src_str);
-                                    end_borrows.push_back((Borrow){.to = borrow.to, .from = src_cpath});
+                                    new_borrow = (Borrow){.to = borrow.to, .from = src_cpath};
                                 } else if (argNameSet.count(src_base)) {
-                                    end_borrows.push_back((Borrow){.to = borrow.to, .from = borrow.from});
+                                    new_borrow = (Borrow){.to = borrow.to, .from = borrow.from};
+                                }
+                                bool too_long = false;
+                                for (CPath new_cpath : {new_borrow.to, new_borrow.from}) {
+                                    static bool already_warned = false;
+                                    if (new_cpath.size() > MAX_CPATH_DEPTH) {
+                                        too_long = true;
+                                        if (!already_warned) {
+                                            already_warned = true;
+                                            errs() << "Warning: MAX_CPATH_DEPTH exceeded when computing end borrows; ignoring such C-paths.\n";
+                                            errs() << "Info: one such path: " << cpath_to_str(new_cpath) << "\n";
+                                        }
+                                    }
+                                }
+                                if (!too_long) {
+                                    end_borrows.push_back(new_borrow);
                                 }
                             }
                             //errs() << "\nFunction " << curFunc->getName().str() << ": borrows at exit:\n";
@@ -1985,6 +2167,11 @@ public:
                                 dest_name = cpath_to_str(parse_cpath(dest_name));
                                 outFile << "borrows_from(" << dest_name << ", " << cpath_to_str(src) << ")\n";
                                 if (pomBorrowsForCurFunc[dest_name].count(cpath_to_str(src))) {continue;}
+                                //errs() << "Old pomBorrows[" << func_name << "][" << dest_name << "] = [";
+                                //for (std::string existing_src : pomBorrowsForCurFunc[dest_name]) {
+                                //    errs() << " " << existing_src;
+                                //}
+                                //errs() << " ]; adding " << cpath_to_str(src) << "\n";
                                 pomBorrowsForCurFunc[dest_name].insert(cpath_to_str(src));
                                 hasUpdatedBorrows = true;
                                 if (!gotOne) {
@@ -1992,7 +2179,7 @@ public:
                                     gotOne = true;
                                 }
                                 if (pomFuncs.count(func_name)) {
-                                    outFile << "false # Func " << func_name << ": missing lifetime: " << dest_name << " borrows from " << cpath_to_str(src) << "\n";
+                                    pomMissingErrors.push_back("Func " + func_name + ": missing lifetime: " + dest_name + " borrows from " + cpath_to_str(src));
                                 } else if (!WholeProg) {
                                     errs() << "WARNING: Func " << func_name << ": missing lifetime: " << dest_name << " borrows from " << cpath_to_str(src) << "\n";
                                 }
@@ -2035,6 +2222,9 @@ public:
                 outFile << "!responsible(" << cpath << ") | mut(" << cpath << ")\n";
             }
         }
+        for (GlobalValue* gv : seen_globals) {
+            outFile << "!responsible(" << getCPath(*gv) << ") # The address of a global is never responsible.\n";
+        }
         
         outFile << "</function>\n\n";
         if (!NumberedIR.empty()) {
@@ -2042,7 +2232,8 @@ public:
         }
         
         reset_at_end_of_func();
-        return false; // We don't modify the IR
+        bool modified = true;
+        return modified;
     }
 
     static const DIType* skipQualifiers(const DIType *Ty) {
@@ -2158,6 +2349,8 @@ public:
     }
     
     void processInstruction(Instruction &I) {
+
+        static std::unordered_set<unsigned> warned_opcodes;
         
         this->curInstruction = &I;
         this->curInstructionID = getInstructionId(I);
@@ -2167,14 +2360,19 @@ public:
             errs() << dump_borrows_to_str(curBI);
             errs() << "\n";
         }
+        for (const llvm::Use &U : I.operands()) {
+            if (GlobalValue* g = dyn_cast<GlobalValue>(U.get())) {
+                seen_globals.insert(g);
+            }
+        }
         if (AllocaInst *AI = dyn_cast<AllocaInst>(&I)) {
             processAlloca(*AI);
         } else if (CallInst *CI = dyn_cast<CallInst>(&I)) {
-            if (Function *F = CI->getCalledFunction()) {
+            if (Function *F = getCalledFunc(CI)) {
                 if (F->getName() == "malloc" || F->getName() == "calloc") {
                     //if (!isDryRun) {outFile << "# (call to " << F->getName().str() << ")\n";}
                     processMalloc(*CI);
-                } else if (F->getName() == "free") {
+                } else if (F->getName() == "free" || F->getName() == "fclose") {
                     //if (!isDryRun) {outFile << "# (call to " << F->getName().str() << ")\n";}
                     processFree(*CI);
                 } else if (F->getName() == "__pom_var_store") {
@@ -2186,7 +2384,9 @@ public:
             } else {
                 // Indirect function call
                 if (!NoWarnFuncPtr) {
-                    errs() << "Warning: indirect function calls (i.e., calls via function pointers) are not supported.\n";
+                    NoWarnFuncPtr = true; // Only warn once.
+                    errs() << "Warning: Unresolved indirect function call (first occurrence: " << getStatementLabel(I, "") << ").\n";
+                    seen_unsupported.insert("unresolved_func_ptr");
                 }
                 std::string stmtPost = getStatementLabel(*CI, "post");
                 std::string stmtPre = getStatementLabel(*CI, "pre");
@@ -2202,14 +2402,35 @@ public:
             processReturn(*RI);
         } else if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(&I)) {
             processGEP(*GEP);
+        } else if (SelectInst *SI = dyn_cast<SelectInst>(&I)) {
+            processSelect(*SI);
+        } else if (dyn_cast<FreezeInst>(&I)) {
+            processFreeze(I);
         } else {
+            unsigned opcode = I.getOpcode();
+            bool recognized = (opcode == Instruction::ICmp || opcode == Instruction::PtrToInt);
+            if (!recognized) {
+                bool hasPtrOperands = false;
+                for (const llvm::Use &U : I.operands()) {
+                    if (U->getType()->isPointerTy()) {
+                        hasPtrOperands = true;
+                        break;
+                    }
+                }
+                if (hasPtrOperands) {
+                    if (!warned_opcodes.count(opcode)) {
+                        warned_opcodes.insert(opcode);
+                        errs() << "Warning: unrecognized opcode '" << I.getOpcodeName() << "' with a pointer-valued operand\n";
+                    }
+                }
+            }
             // Other instructions - generate preservation constraints
             std::string stmtPost = getStatementLabel(I, "post");
             std::string stmtPre = getStatementLabel(I, "pre");
             generatePreservationConstraints(stmtPre, stmtPost, {}, {});
         }
     }
-    
+
     void processAlloca(AllocaInst &alloca) {
         std::string ptrName = getCPath(alloca);
         std::string stmtPost = getStatementLabel(alloca, "post");
@@ -2217,14 +2438,13 @@ public:
         
         if (!isDryRun) {
             outFile << "!responsible(" << ptrName << ")\n";
+            outFile << "good(" << ptrName << ", " << stmtPost << ")\n";
         }
         
-        curBI.add_origin_for_borrow(parse_cpath(ptrName));
-
         add_zombie_to_uninit_pointee(ptrName, stmtPost, &alloca);
 
         // Add to seen C-paths
-        seenCPaths.insert(ptrName);
+        add_seen_cpath_str(ptrName);
         
         // good(x, S-post) <-> good(x, S-pre) for all other x
         generatePreservationConstraints(stmtPre, stmtPost, {ptrName}, {});
@@ -2243,15 +2463,13 @@ public:
             outFile << "!zombie(" << ptrName << ", " << stmtPost << ") # Zombie is never returned by malloc\n";
         }
         
-        curBI.add_origin_for_borrow(parse_cpath(ptrName));
-
         Function *F = CI.getCalledFunction();
         if (F->getName() != "calloc") {
             add_zombie_to_uninit_pointee(ptrName, stmtPost, &CI);
         }
         
         // Add to seen C-paths
-        seenCPaths.insert(ptrName);
+        add_seen_cpath_str(ptrName);
         
         // Preservation constraints for other variables
         generatePreservationConstraints(stmtPre, stmtPost, {ptrName}, {});
@@ -2270,7 +2488,7 @@ public:
                     }
                     break;
                 }
-                seenCPaths.insert(starPfx + ptr);
+                add_seen_cpath_str(starPfx + ptr);
                 if (!isDryRun) {
                     outFile << "!responsible(" << starPfx << ptr << ") | zombie(" << starPfx << ptr << ", " << stmtPost << ") # Uninit values are considered zombies\n"; /* pri_cat=uninit */
                 }
@@ -2280,6 +2498,14 @@ public:
             }
         }
     }
+
+    Value* trace_thru_freeze(Value* val) {
+        if (isa<FreezeInst>(val)) {
+            return dyn_cast<FreezeInst>(val)->getOperand(0);
+        } else {
+            return val;
+        }
+    }
     
     void processFree(CallInst &CI) {
         Value* arg = CI.getArgOperand(0);
@@ -2287,16 +2513,24 @@ public:
         std::string stmtPost = getStatementLabel(CI, "post");
         std::string stmtPre = getStatementLabel(CI, "pre");
         
+        std::string destructor_name = getCalledFunc(&CI)->getName().str();
+        
         if (!isDryRun) {
             outFile << "responsible(" << ptrName << ")\n";
             outFile << "!zombie(" << ptrName << ", " << stmtPre << ") # A zombie ptr should not be freed.\n"; /* pri_cat=double_free */
+            if (destructor_name == std::string("fclose")) {
+                outFile << "!null(" << ptrName << ", " << stmtPre << ") # A null ptr should not be given to fclose().\n"; /* pri_cat=invalid_free */
+            }
             outFile << "!good(" << ptrName << ", " << stmtPre << ") | zombie(" << ptrName << ", " << stmtPost << ") # A good ptr becomes a zombie after getting freed.\n"; /* pri_cat=basic */
             outFile << "!null(" << ptrName << ", " << stmtPre << ") | null(" << ptrName << ", " << stmtPost << ") # Preservation \n";
             if (!DisableMemLeak) {
                 outFile << "!responsible(*" << ptrName << ") | !good(*" << ptrName << ", " << stmtPre << ") # Freeing a memory block holding a good responsible pointer causes a memory leak\n"; /* pri_cat=mem_leak */
             }
-            if (isa<UndefValue>(arg)) {
+            if (isa<UndefValue>(trace_thru_freeze(arg))) {
                 outFile << "false # An uninitialized pointer must not be passed to free.\n";
+            }
+            if (isa<PoisonValue>(trace_thru_freeze(arg))) {
+                outFile << "false # A poison value must not be passed to free.\n";
             }
         }
         
@@ -2329,7 +2563,7 @@ public:
         }
 
         // Add to seen C-paths
-        seenCPaths.insert(ptrName);
+        add_seen_cpath_str(ptrName);
         
         // Preservation constraints for other variables
         generatePreservationConstraints(stmtPre, stmtPost, {ptrName}, {});
@@ -2359,7 +2593,7 @@ public:
     void processDirectCall(CallInst &CI) {
         std::string stmtPost = getStatementLabel(CI, "post");
         std::string stmtPre = getStatementLabel(CI, "pre");
-        Function *F = CI.getCalledFunction();
+        Function *F = getCalledFunc(&CI);
         std::string func_name = F->getName().str();
         std::set<std::string> changedCPaths = {};
         static std::set<std::string> warnedFuncs = {};
@@ -2382,9 +2616,6 @@ public:
         std::map<std::string, std::string> formal_to_actual;
 
         // Process each argument
-        // TODO (FIXME): We should iterate over the actual arguments, 
-        // so that we can catch passing a zombie to a variadic function.
-        // Also do basic processing even if the arg lacks a name.
         for (int i = 0; i < CI.arg_size(); i++) {
             if (!CI.getArgOperand(i)->getType()->isPointerTy()) {
                 continue;
@@ -2406,7 +2637,7 @@ public:
                                 warnedFuncs.insert(func_name);
                             }
                         }
-                        continue;
+                        formal_param_name = std::string("arg-") + std::to_string(i);
                     }
                 }
             } else {
@@ -2422,10 +2653,12 @@ public:
 
             formal_to_actual[formal_param_name] = act_arg;
             
-            seenCPaths.insert(act_arg);
+            add_seen_cpath_str(act_arg);
             changedCPaths.insert(act_arg);
             
-            outFile << "!zombie(" << act_arg << ", " << stmtPre << ") # Don't pass zombies to functions.\n"; /* pri_cat=zombie_arg */
+            if (!isDryRun) {
+                outFile << "!zombie(" << act_arg << ", " << stmtPre << ") # Don't pass zombies to functions.\n"; /* pri_cat=zombie_arg */
+            }
             
             // Use PtrCopyConstraints for arguments
             PtrCopyArgs ptrCopyArgs = {
@@ -2451,7 +2684,7 @@ public:
                         break;
                     }
                     
-                    seenCPaths.insert(starPfx + act_arg);
+                    add_seen_cpath_str(starPfx + act_arg);
 
                     // good(*userfunc::formal_param_i, end) -> good(*act_arg_i, S-post) and ditto for null and zombie
                     if (!isDryRun) {
@@ -2464,6 +2697,14 @@ public:
                 } else {
                     break;
                 }
+            }
+        }
+
+        if (func_name == "realloc") {
+            std::string& arg0 = actual_arg_name_vec[0];
+            argsToRealloc.insert(arg0);
+            if (!isDryRun) {
+                outFile << "!good(" << arg0 << ", " << stmtPre << ") | good(" << arg0 << ", " << stmtPost << ") # If realloc fails, the passed-in resp ptr stays good.\n";
             }
         }
 
@@ -2524,9 +2765,12 @@ public:
             //}
 
             bool returnHasUses = has_nondummy_uses(&CI);
-            std::string actual_return_str = getCPath(CI);
-            CPathPart actual_return_cpath_base = parse_cpath(actual_return_str)[0];
-            formal_to_actual["return"] = actual_return_str;
+            CPathPart actual_return_cpath_base;
+            if (!CI.getType()->isVoidTy()) {
+                std::string actual_return_str = getCPath(CI);
+                actual_return_cpath_base = parse_cpath(actual_return_str)[0];
+                formal_to_actual["return"] = actual_return_str;
+            }
 
             for (auto const& [dest_formal_cpath_str, src_list] : pomBorrowsForCallee) {
                 CPath dest_cpath = parse_cpath(dest_formal_cpath_str);
@@ -2535,15 +2779,6 @@ public:
                 if (dest_actual_name.empty()) {
                     errs() << "Error: Unrecognized argument name \"" << dest_formal_cpath_str << "\" (func: " << func_name << ")\n";
                     continue;
-                    //errs() << "dest_formal_cpath_str: " << dest_formal_cpath_str << "\n";
-                    //errs() << "dest_formal_name: " << dest_formal_name << "\n";
-                    //errs() << "full name: " << cpath_part_id_to_str[dest_cpath[0]] << "\n";
-                    //errs() << "Formal params:";
-                    //for (std::string formal_param_name : formal_param_name_vec) {
-                    //    errs() << " " << formal_param_name;
-                    //}
-                    //errs() << "\n";
-                    //abort();
                 }
                 dest_cpath[0] = get_cpath_part_id_from_str(dest_actual_name);
                 for (const std::string& src_formal_cpath_str : src_list) {
@@ -2599,9 +2834,8 @@ public:
         if (CI.getType()->isPointerTy()) {
             std::string tName = getCPath(CI);
             std::string returnName = func_name + "::return";
-            curBI.add_origin_for_borrow(parse_cpath(tName));
             
-            seenCPaths.insert(tName);
+            add_seen_cpath_str(tName);
             changedCPaths.insert(tName);
 
             if (!isDryRun) {
@@ -2609,8 +2843,19 @@ public:
                 outFile << "!responsible(" << returnName << ") | responsible(" << tName << ")\n";
                 outFile << "!responsible(" << tName << ") | responsible(" << returnName << ")\n";
 
-                // mut(t) -> mut(userfunc::return)
-                outFile << "!mut(" << tName << ") | mut(" << returnName << ")\n";
+                auto itDepMut = pomDepMutRet.find(func_name);
+                if (itDepMut != pomDepMutRet.end()) {
+                    std::string rhs_arg_formal = itDepMut->second;
+                    std::string rhs_arg_actual = formal_to_actual[rhs_arg_formal];
+                    if (rhs_arg_actual.empty()) {
+                        errs() << "Error: Unrecognized argument name \"" << rhs_arg_formal << "\" (func: " << func_name << ")\n";
+                    } else {
+                        outFile << "!mut(" << tName << ") | mut(" << rhs_arg_actual << ")\n";
+                    }
+                } else {
+                    // mut(t) -> mut(userfunc::return)
+                    outFile << "!mut(" << tName << ") | mut(" << returnName << ")\n";
+                }
 
                 // good(userfunc::return, end) -> good(t, S-post) and ditto for null and zombie
                 outFile << "!good(" << returnName << ", end) | good(" << tName << ", " << stmtPost << ")\n";
@@ -2636,76 +2881,89 @@ public:
         generatePreservationConstraints(stmtPre, stmtPost, changedCPaths, {});
     }
 
-    void getAliasesOf(CPath ptr_cpath, bool only_must, std::vector<CPath>* aliases, std::vector<bool>* must_vec=nullptr) {
+    void getAliasesOf(CPath ptr_cpath, bool only_must, std::vector<CPath>* aliases) {
         // The output list includes the original pointer itself.
         // We intentionally consider only straight-up and straight-down alias chains.
         // For mutable borrows, this finds all the aliases.  For non-mutable borrows,
         // we can soundly ignore other aliases (at a cost of some false positives).
         aliases->push_back(ptr_cpath);
-        if (must_vec) {must_vec->push_back(true);}
         std::set<CPath> already_seen;
         already_seen.insert(ptr_cpath);
+        static bool already_warned_max_cpath = false;
+
         for (int dir : {0, 1}) {
+            // dir==0: aliases that borrow from ptr_cpath (directly or indirectly)
+            // dir==1: aliases from which ptr_cpath borrows (directly or indirectly)
             Worklist<CPath> worklist;
             worklist.push(ptr_cpath);
+            //if (!isDryRun) {
+            //    errs() << "\nFinding aliases of " << cpath_to_str(ptr_cpath) << ", dir=" << dir << "\n";
+            //}
             while (!worklist.empty()) {
-                CPath cur_cpath = worklist.pop();
+                CPath full_cpath = worklist.pop();
 
-                CPath cur_cpath_end = cur_cpath;
-                cur_cpath_end.push_back(0);
+                //if (!isDryRun) {
+                //    errs() << "\n  full_cpath: " << cpath_to_str(full_cpath) << "\n";
+                //}
+                
+                // If p1 is an alias of p2, then *p1 is an alias of *p2.
+                // If p1 is an alias of p2, then p1.fld is an alias of p2.fld.
+                for (int cpath_split_pt = 0; cpath_split_pt < full_cpath.size(); cpath_split_pt++) {
+                    CPath cpath_prefix(full_cpath.begin(), full_cpath.begin() + cpath_split_pt + 1);
+                    CPath cpath_suffix(full_cpath.begin() + cpath_split_pt + 1, full_cpath.end());
+                    //if (!isDryRun) {
+                    //    errs() << "  Prefix: " << cpath_to_str(cpath_prefix) << "\n";
+                    //    errs() << "  Suffix: " << cpath_to_str(cpath_suffix, false) << "\n";
+                    //}
 
-                // Borrowing from
-                if (dir == 0) {
-                    const Borrow lower = {.to = {0}, .from = cur_cpath};
-                    const Borrow upper = {.to = {0}, .from = cur_cpath_end};
-                    auto itLo = curBI.borrows_by_src.lower_bound(lower);
-                    auto itHi = curBI.borrows_by_src.lower_bound(upper);
-                    for (auto it = itLo; it != itHi; ++it) {
-                        const Borrow& curBorrow = *it;
-                        bool is_must = curBI.is_must_borrow[curBorrow];
-                        if (only_must && !is_must) {
-                            continue;
+                    // Process a list of borrows that starts with itLo and ends right before itHi.
+                    auto process_borrows = [&](auto itLo, auto itHi) {
+                        for (auto it = itLo; it != itHi; ++it) {
+                            const Borrow& curBorrow = *it;
+                            bool is_must = curBI.is_must_borrow[curBorrow];
+                            if (only_must && !is_must) {
+                                continue;
+                            }
+                            assert((dir == 0) ? curBorrow.from == cpath_prefix : curBorrow.to == cpath_prefix);
+                            CPath ali = (dir == 0) ? curBorrow.to : curBorrow.from;
+                            ali.reserve(ali.size() + cpath_suffix.size());
+                            for (CPathPart part : cpath_suffix) {
+                                ali.push_back(part);
+                            }
+                            if (ali.size() > MAX_CPATH_DEPTH) {
+                                if (!already_warned_max_cpath) {
+                                    already_warned_max_cpath = true;
+                                    errs() << "Warning: MAX_CPATH_DEPTH exceeded when computing aliases; ignoring such C-paths.\n";
+                                    errs() << "Info: one such path: " << cpath_to_str(ali) << "\n";
+                                }
+                                continue;
+                            }
+                            if (already_seen.count(ali) == 0) {
+                                aliases->push_back(ali);
+                                worklist.push(ali);
+                                already_seen.insert(ali);
+                            }
                         }
-                        assert(curBorrow.from == cur_cpath);
-                        CPath ali = curBorrow.to;
-                        if (already_seen.count(ali) == 0) {
-                            aliases->push_back(ali);
-                            if (must_vec) {must_vec->push_back(is_must);}
-                            worklist.push(ali);
-                            already_seen.insert(ali);
-                        } else {
-                            errs() << "[I" << curInstructionID << "] Error in getAliasesOf(" << cpath_to_str(ptr_cpath) << "), dir=0: already seen " << cpath_to_str(ali) << "\n";
-                        }
-                    }
-                }
-                // Borrowing to
-                else {
-                    const Borrow lower = {.to = cur_cpath, .from = {0}};
-                    const Borrow upper = {.to = cur_cpath_end, .from = {0}};
-                    auto itLo = curBI.borrows_by_dest.lower_bound(lower);
-                    auto itHi = curBI.borrows_by_dest.lower_bound(upper);
-                    for (auto it = itLo; it != itHi; ++it) {
-                        const Borrow& curBorrow = *it;
-                        bool is_must = curBI.is_must_borrow[curBorrow];
-                        if (only_must && !is_must) {
-                            continue;
-                        }
-                        assert(curBorrow.to == cur_cpath);
-                        CPath ali = curBorrow.from;
-                        if (already_seen.count(ali) == 0) {
-                            aliases->push_back(ali);
-                            if (must_vec) {must_vec->push_back(is_must);}
-                            worklist.push(ali);
-                            already_seen.insert(ali);
-                        } else {
-                            errs() << "[I" << curInstructionID << "] Error in getAliasesOf(" << cpath_to_str(ptr_cpath) << "), dir=1: already seen " << cpath_to_str(ali) << "\n";
-                        }
+                    };
+
+                    CPath cur_cpath_pfx_end = cpath_prefix;
+                    cur_cpath_pfx_end.push_back(0);
+
+                    if (dir == 0) {
+                        // Iterate over all borrows where from=cpath_prefix
+                        const Borrow lower = {.to = {0}, .from = cpath_prefix};
+                        const Borrow upper = {.to = {0}, .from = cur_cpath_pfx_end};
+                        process_borrows(curBI.borrows_by_src.lower_bound(lower),
+                                        curBI.borrows_by_src.upper_bound(upper));
+                    } else {
+                        // Iterate over all borrows where to=cpath_prefix
+                        const Borrow lower = {.to = cpath_prefix, .from = {0}};
+                        const Borrow upper = {.to = cur_cpath_pfx_end, .from = {0}};
+                        process_borrows(curBI.borrows_by_dest.lower_bound(lower),
+                                        curBI.borrows_by_dest.upper_bound(upper));
                     }
                 }
             }
-        }
-        if (must_vec) {
-            assert(must_vec->size() == aliases->size());
         }
     }
 
@@ -2783,6 +3041,16 @@ public:
         if (!has_deref) {
             return orig_cpath;
         }
+        // Motivating example:
+        //  - Consider a callsite of a function foo(int*** arg_1, int*** arg_2, int*** arg_3).
+        //  - The callee (foo) may write to *arg_i and **arg_i.
+        //  - If the function summary of foo indicates that foo makes borrows from the
+        //    original values of arg referents, we should distinguish between the original
+        //    values and the new values when updating the BorrowInfo after the callsite.
+        // For each C-path rooted at an argument, we create a dummy variable to hold the original
+        // value stored at the C-path location.  We take the original C-path string and replace
+        // special characters to ensure that the new C-path is parsed as single variable.
+        // This is similar to what we do with function arguments at function entry (search for ":@orig").
         std::string cpath_str = cpath_to_str(orig_cpath, false);
         size_t cpath_str_len = cpath_str.length();
         for (int i=0; i < cpath_str_len; i++) {
@@ -2866,6 +3134,7 @@ public:
             }
             // !zombie(p1, S-pre)
             outFile << "!zombie(" << p1Name << ", " << stmtPre << ") # Cannot read via a zombie ptr.\n"; /* pri_cat=deref_zombie */
+            outFile << "good(" << p1Name << ", " << stmtPre << ") # Cannot read via a non-good ptr.\n"; /* pri_cat=deref_zombie */
 
             // !mut(p1) -> !mut(t)
             outFile << "mut(" << p1Name << ") | !mut(" << tName << ") # Cannot get mutable access via an immutable ptr.\n"; /* pri_cat=mut_via_immut */
@@ -2873,13 +3142,20 @@ public:
             if (!DisableBorrowChecks && !isDryRun) {
                 std::vector<Borrow> borrows;
                 getBorrowsBySrcRootedAt(parse_cpath(p1Name), &borrows);
+                if (borrows.size() > 0) {
+                    outFile << "!responsible(" << tName << ") # Cannot transfer responsibility via a ptr (" << p1Name << ") that has outstanding borrows.  Borrowed by:"; /* pri_cat=borrow */
+                    for (Borrow& borrow : borrows) {
+                        outFile << " " << cpath_to_str(borrow.to);
+                    }
+                    outFile << "\n";
+                }
                 for (Borrow& borrow : borrows) {
                     CPath borrower = borrow.to;
                     outFile << "!mut(" << cpath_to_str(borrower) << ") # Cannot read via a ptr (" << p1Name << ") that is mutably borrowed.\n"; /* pri_cat=borrow */
                 }
             }
         }
-        seenCPaths.insert(p1Name);
+        add_seen_cpath_str(p1Name);
         
         std::set<std::string> changedCPaths = {};
         std::set<std::string> maybeZombifiedCPaths = {};
@@ -2888,13 +3164,13 @@ public:
             // Use PtrCopyConstraints for pointer loads
             std::string derefP1 = "*" + p1Name;
             
-            seenCPaths.insert(tName);
-            seenCPaths.insert(derefP1);
+            add_seen_cpath_str(tName);
+            add_seen_cpath_str(derefP1);
             changedCPaths.insert(tName);
 
             if (!DisableBorrowChecks) {
                 std::vector<CPath> aliases;
-                get_loc_aliases_of_possible_deref(parse_cpath(derefP1), false, &aliases, nullptr);
+                get_loc_aliases_of_possible_deref(parse_cpath(derefP1), false, &aliases);
                 
                 for (const CPath& alias_cpath : aliases) {
                     std::string ali = cpath_to_str(alias_cpath);
@@ -2915,7 +3191,24 @@ public:
 
         generatePreservationConstraints(stmtPre, stmtPost, changedCPaths, maybeZombifiedCPaths);
     }
-    
+
+    std::vector<std::string> get_unsupported_feats_metadata(Instruction* I) {
+        MDNode *MD = I->getMetadata("unsupported_features");
+        if (!MD || MD->getNumOperands() == 0) {
+            return {};
+        }
+        
+        // Parse metadata to get list of possible callees
+        std::vector<std::string> ret;
+        
+        for (unsigned i = 0; i < MD->getNumOperands(); ++i) {
+            MDString *nameMD = dyn_cast<MDString>(MD->getOperand(i));
+            if (!nameMD) continue;
+            ret.push_back(nameMD->getString().str());
+        }
+        return ret;
+    }
+
     void processStore(StoreInst &SI) {
         Value *ptr = SI.getPointerOperand();
         Value *val = SI.getValueOperand();
@@ -2923,6 +3216,21 @@ public:
         std::string stmtPre = getStatementLabel(SI, "pre");
         std::string stmtPost = getStatementLabel(SI, "post");
         
+        if (val->getType()->isPointerTy() && !isDryRun) {
+            for (std::string feat : get_unsupported_feats_metadata(&SI)) {
+                seen_unsupported.insert(feat);
+            }
+            if (isa<GlobalVariable>(ptr)) {
+                seen_unsupported.insert("global_ptr_write");
+            }
+            if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(ptr)) {
+                Type* sourceElementType = GEP->getSourceElementType();
+                if (isa<StructType>(sourceElementType)) {
+                    seen_unsupported.insert("write_ptr_to_struct");
+                }
+            }
+        }
+
         if (!isDryRun) {
             // mut(p1)
             outFile << "mut(" << p1Name << ") # Ptr used for writing must be mut.\n"; /* pri_cat=mut */
@@ -2932,6 +3240,7 @@ public:
             }
             // !zombie(p1, S-pre)
             outFile << "!zombie(" << p1Name << ", " << stmtPre << ") # Cannot write via a zombie ptr.\n"; /* pri_cat=deref_zombie */
+            outFile << "good(" << p1Name << ", " << stmtPre << ") # Cannot read via a non-good ptr.\n"; /* pri_cat=deref_zombie */
         }
         std::vector<CPath> aliases;
         if (!DisableBorrowChecks && val->getType()->isPointerTy()) {
@@ -2984,7 +3293,7 @@ public:
                 }
             }
         }
-        seenCPaths.insert(p1Name);
+        add_seen_cpath_str(p1Name);
         
         std::set<std::string> changedCPaths = {};
         std::set<std::string> maybeZombifiedCPaths = {};
@@ -2993,8 +3302,8 @@ public:
             std::string tName = getCPath(*val);
             std::string derefP1 = "*" + p1Name;
             
-            seenCPaths.insert(derefP1);
-            seenCPaths.insert(tName);
+            add_seen_cpath_str(derefP1);
+            add_seen_cpath_str(tName);
             maybeZombifiedCPaths.insert(tName);
             changedCPaths.insert(derefP1);
 
@@ -3004,7 +3313,7 @@ public:
 
             if (!DisableBorrowChecks) {
                 std::vector<CPath> aliases;
-                get_loc_aliases_of_possible_deref(parse_cpath(derefP1), true, &aliases, nullptr);
+                get_loc_aliases_of_possible_deref(parse_cpath(derefP1), true, &aliases);
                 
                 for (const CPath& alias_cpath : aliases) {
                     std::string ali = cpath_to_str(alias_cpath);
@@ -3045,6 +3354,22 @@ public:
         }
         return DIVar->getName().str();
     }
+
+    std::string get_phi_origin_metadata(llvm::PHINode *inst) {
+        llvm::MDNode *MD = inst->getMetadata("phi_origin");
+        if (!MD) {
+            return "";
+        }
+        if (MD->getNumOperands() != 1) {
+            return "";
+        }
+        llvm::Metadata *Op = MD->getOperand(0);
+        if (llvm::MDString *MDS = llvm::dyn_cast<llvm::MDString>(Op)) {
+            return MDS->getString().str();
+        } else {
+            return "";
+        }
+    }
     
     void processPomVarStore(CallInst &CI) {
         std::string varName = getCPath(CI);
@@ -3069,20 +3394,12 @@ public:
         };
         PtrCopyConstraints(ptrCopyArgs);
 
-        seenCPaths.insert(varName);
-        seenCPaths.insert(srcName);
+        add_seen_cpath_str(varName);
+        add_seen_cpath_str(srcName);
         std::set<std::string> changedCPaths = {varName};
         std::set<std::string> maybeZombifiedCPaths = {srcName};
         
         if (!isDryRun) {
-            //if (isa<CallInst>(CI.getArgOperand(0))) {
-            //    CallInst* call_ret_val = dyn_cast<CallInst>(CI.getArgOperand(0));
-            //    if (this->firstUseOfCall[call_ret_val] == nullptr) {
-            //        this->firstUseOfCall[call_ret_val] = &CI;
-            //        outFile << "responsible(" << varName << ") | !responsible(" << srcName << ") # Result of func returning a resp ptr must be stored in a resp ptr.\n";
-            //    }
-            //}
-            
             if (!DisablePomLocals) {
                 std::string funcName = CI.getParent()->getParent()->getName().str();
                 std::string origVarName = get_pom_orig_var_name(CI);
@@ -3090,23 +3407,103 @@ public:
                     std::string pomName = funcName + "::locals::" + origVarName;
                     outFile << "!responsible(" << varName << ") | responsible(" << pomName << ")\n";
                     outFile << "!responsible(" << pomName << ") | responsible(" << varName << ")\n";
+                    outFile << "!mut(" << varName << ") | mut(" << pomName << ")\n";
+                    outFile << "!mut(" << pomName << ") | mut(" << varName << ")\n";
                 }
             }
         }
         
         generatePreservationConstraints(stmtPre, stmtPost, changedCPaths, maybeZombifiedCPaths);
     }
+
+    void processFreeze(Instruction &I) {
+        std::string stmtPre = getStatementLabel(I, "pre");
+        std::string stmtPost = getStatementLabel(I, "post");
+
+        if (!I.getType()->isPointerTy()) {
+            generatePreservationConstraints(stmtPre, stmtPost, {}, {});
+            return;
+        }
+
+        std::string destName = getCPath(I);
+        std::string srcName = getCPath(*I.getOperand(0));
+
+        std::set<std::string> changedCPaths = {destName};
+        std::set<std::string> maybeZombifiedCPaths = {};
+
+        if (isa<UndefValue>(I.getOperand(0)) || isa<PoisonValue>(I.getOperand(0))) {
+            if (!isDryRun) {
+                outFile << "zombie(" << destName << ", " << stmtPost << ") # Undef/poison value\n";
+            }
+        } else {
+            PtrCopyArgs ptrCopyArgs = {
+                .dest = destName,
+                .src = srcName,
+                .stmtPre = stmtPre,
+                .stmtPost = stmtPost,
+                .inst = &I
+            };
+            PtrCopyConstraints(ptrCopyArgs);
+            maybeZombifiedCPaths.insert(srcName);
+        }
+
+        add_seen_cpath_str(destName);
+        add_seen_cpath_str(srcName);
+        
+        generatePreservationConstraints(stmtPre, stmtPost, changedCPaths, maybeZombifiedCPaths);
+    }
+
+    void processSelect(SelectInst &SI) {
+        std::string stmtPre = getStatementLabel(SI, "pre");
+        std::string stmtPost = getStatementLabel(SI, "post");
+
+        if (!SI.getType()->isPointerTy()) {
+            generatePreservationConstraints(stmtPre, stmtPost, {}, {});
+            return;
+        }
+
+        std::string destName = getCPath(SI);
+        std::string val1_Name = getCPath(*SI.getTrueValue());
+        std::string val2_Name = getCPath(*SI.getFalseValue());
+
+        PtrCopyArgs ptrCopyArgs = {
+            .dest = destName,
+            .src = val1_Name,
+            .stmtPre = stmtPre,
+            .stmtPost = stmtPost,
+            .inst = &SI
+        };
+        PtrCopyConstraints(ptrCopyArgs);
+
+        ptrCopyArgs.src = val2_Name;
+        PtrCopyConstraints(ptrCopyArgs);
+
+        add_seen_cpath_str(destName);
+        add_seen_cpath_str(val1_Name);
+        add_seen_cpath_str(val2_Name);
+        std::set<std::string> changedCPaths = {destName};
+        std::set<std::string> maybeZombifiedCPaths = {val1_Name, val2_Name};
+        
+        generatePreservationConstraints(stmtPre, stmtPost, changedCPaths, maybeZombifiedCPaths);
+    }
+
+    void processNop(Instruction &I) {
+        std::string stmtPre = getStatementLabel(I, "pre");
+        std::string stmtPost = getStatementLabel(I, "post");
+        generatePreservationConstraints(stmtPre, stmtPost, {}, {});
+    }
     
     void processPhi(PHINode &PN) {
-        std::string tName = getCPath(PN);
         std::string stmtPre = getStatementLabel(PN, "pre");
         std::string stmtPost = getStatementLabel(PN, "post");
-        std::set<std::string> maybeZombifiedCPaths = {};
 
         if (!PN.getType()->isPointerTy()) {
             generatePreservationConstraints(stmtPre, stmtPost, {}, {});
             return;
         }
+
+        std::string tName = getCPath(PN);
+        std::set<std::string> maybeZombifiedCPaths = {};
         
         for (unsigned i = 0; i < PN.getNumIncomingValues(); ++i) {
             Value *incomingVal = PN.getIncomingValue(i);
@@ -3150,7 +3547,7 @@ public:
             maybeZombifiedCPaths.insert(xiName);
         }
         
-        seenCPaths.insert(tName);
+        add_seen_cpath_str(tName);
 
         std::set<std::string> changedCPaths = {tName};
         generatePreservationConstraints(stmtPre, stmtPost, changedCPaths, maybeZombifiedCPaths);
@@ -3160,17 +3557,18 @@ public:
         std::string stmtPre = getStatementLabel(RI, "pre");
         std::string stmtPost = getStatementLabel(RI, "post"); // This will be "end"
         Value *retVal = RI.getReturnValue();
+        static std::unordered_set<std::string> already_warned;
 
         if (retVal && retVal->getType()->isPointerTy()) {
             // There is a return value
             std::string tName = getCPath(*retVal);
             
             // Add to seen C-paths
-            seenCPaths.insert(tName);
+            add_seen_cpath_str(tName);
 
             std::string curFuncName = RI.getParent()->getParent()->getName().str();
             std::string returnName = curFuncName + "::return";
-            seenCPaths.insert(returnName);
+            add_seen_cpath_str(returnName);
 
             PtrCopyArgs ptrCopyArgs = {
                 .dest = returnName,
@@ -3194,8 +3592,12 @@ public:
                         break;
                     }
                     
-                    seenCPaths.insert(starPfx + tName);
-                    seenCPaths.insert(starPfx + returnName);
+                    if (!pomCPaths.count(starPfx + returnName) && !already_warned.count(starPfx + returnName)) {
+                        pomMissingErrors.push_back("Missing in '.pom.yml' file: " + starPfx + returnName);
+                    }
+
+                    add_seen_cpath_str(starPfx + tName);
+                    add_seen_cpath_str(starPfx + returnName);
 
                     if (!isDryRun) {
                         // responsible(t) <-> responsible(return)
@@ -3224,6 +3626,22 @@ public:
             // Just generate preservation constraints for all variables
             generatePreservationConstraints(stmtPre, stmtPost, {}, {});
         }
+    }
+
+    
+    Value* trace_thru_GEP(Value* ptr) {
+        while (true) {
+            if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(ptr)) {
+                ptr = GEP->getPointerOperand();
+            } else {
+                break;
+            }
+        }
+        return ptr;
+    }
+
+    Function* getCalledFunc(CallBase* CB) {
+        return dyn_cast<Function>(CB->getCalledOperand()->stripPointerCasts());
     }
 
     void processGEP(GetElementPtrInst &GEP) {
@@ -3276,7 +3694,7 @@ public:
         }
     
         // Add to seen C-paths
-        seenCPaths.insert(tName);
+        add_seen_cpath_str(tName);
         
         // good(x, S-post) <-> good(x, S-pre) for all other x (except t)
         generatePreservationConstraints(stmtPre, stmtPost, {tName}, {});
@@ -3353,6 +3771,25 @@ public:
         }
     }
 
+    bool has_nonself_borrows(Instruction* inst) {
+        std::vector<Borrow> borrows;
+        getBorrowsBySrcRootedAt(parse_cpath(getCPath(*inst)), &borrows);
+        DILocalVariable* self_name_DI = get_pom_orig_var_DIVar(*inst);
+        for (const Borrow& borrow : borrows) {
+            if (borrow.from.size() > 1) {
+                return true;
+            }
+            Instruction* to = dyn_cast<Instruction>(cpathToValue[cpath_part_id_to_str[borrow.from[0]]]);
+            if (!to) {
+                return true;
+            }
+            if (get_pom_orig_var_DIVar(*to) != self_name_DI) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void handleBorrowsAtPtrCopy(PtrCopyArgs& args) {
 
         std::string& srcName = args.src;
@@ -3394,10 +3831,18 @@ public:
         }
         for (auto it = itLo; it != itHi; ++it) {
             otherBorrowing = cpath_to_str((*it).to);
-            Value* otherLLVM = cpathToValue[otherBorrowing];
-            if (otherLLVM && isa<PHINode>(args.inst) && isa<PHINode>(otherLLVM)) {
-                if (get_pom_orig_var_name(*args.inst) == get_pom_orig_var_name(*dyn_cast<PHINode>(otherLLVM))) {
-                    continue;
+            if (isa<PHINode>(args.inst) && srcInst) {
+                Value* otherLLVM = cpathToValue[otherBorrowing];
+                if (otherLLVM && isa<PHINode>(otherLLVM)) {
+                    DILocalVariable* src_orig_name_DI = get_pom_orig_var_DIVar(*srcInst);
+                    bool ok = (
+                        src_orig_name_DI == get_pom_orig_var_DIVar(*args.inst) &&
+                        src_orig_name_DI == get_pom_orig_var_DIVar(*dyn_cast<PHINode>(otherLLVM)) &&
+                        !has_nonself_borrows(srcInst) &&
+                        !has_nonself_borrows(dyn_cast<PHINode>(otherLLVM)));
+                    if (ok) {
+                        continue;
+                    }
                 }
             }
             hasExistingBorrow = true;
@@ -3455,19 +3900,16 @@ public:
         }
     }
 
-    void get_loc_aliases_of_possible_deref(CPath givenCPath, bool only_must, std::vector<CPath>* loc_aliases, std::vector<bool>* must_vec) {
+    void get_loc_aliases_of_possible_deref(CPath givenCPath, bool only_must, std::vector<CPath>* loc_aliases) {
         if (givenCPath.back() == DEREF_PART_ID && !DisableBorrowChecks) {
             CPath givenAddr = givenCPath;
             givenAddr.pop_back();
-            getAliasesOf(givenAddr, only_must, loc_aliases, must_vec);
+            getAliasesOf(givenAddr, only_must, loc_aliases);
             for (CPath& alias_cpath : *loc_aliases) {
                 alias_cpath.push_back(DEREF_PART_ID);
             }
         } else {
             loc_aliases->push_back(givenCPath);
-            if (must_vec) {
-                must_vec->push_back(true);
-            }
         }
     }
 
@@ -3483,10 +3925,13 @@ public:
 
         std::vector<CPath> dest_loc_aliases;
         std::vector<CPath> src_loc_aliases;
-        std::vector<bool> src_loc_alias_is_must;
+        std::vector<CPath> src_loc_must_alias_vec;
 
-        get_loc_aliases_of_possible_deref(parse_cpath(destName), false, &dest_loc_aliases, nullptr);
-        get_loc_aliases_of_possible_deref(parse_cpath(srcName), false, &src_loc_aliases, &src_loc_alias_is_must);
+        get_loc_aliases_of_possible_deref(parse_cpath(destName), false, &dest_loc_aliases);
+        get_loc_aliases_of_possible_deref(parse_cpath(srcName), false, &src_loc_aliases);
+        get_loc_aliases_of_possible_deref(parse_cpath(srcName), true, &src_loc_must_alias_vec);
+        std::set<CPath> src_loc_must_alias_set(src_loc_must_alias_vec.begin(), src_loc_must_alias_vec.end());
+
 
         handleBorrowsAtPtrCopy(args);
 
@@ -3505,7 +3950,7 @@ public:
             /* States properties of the source */
             for (int i=0; i < src_loc_aliases.size(); i++) {
                 CPath& alias_cpath = src_loc_aliases[i];
-                bool is_must = src_loc_alias_is_must[i];
+                bool is_must = src_loc_must_alias_set.count(alias_cpath);
                 std::string src_ali = cpath_to_str(alias_cpath);
 
                 // responsible(dest) -> (good(src, S-pre) -> zombie(src, S-post))
@@ -3527,15 +3972,16 @@ public:
 
             /* State properties of the destination */
             bool is_alias = false;
+            std::string callsite = (isa<CallInst>(args.inst) ? "Callsite: " : "");
             for (CPath& alias_cpath : dest_loc_aliases) {
                 std::string ali = cpath_to_str(alias_cpath);
                 std::string is_ali_str = is_alias ? " (alias)" : " ";
                 // (responsible(dest) && good(src, S-pre)) -> good(dest, S-post-dest)
-                outFile << "!good(" << srcName << ", " << stmtPre << ") | good(" << ali << ", " << stmtPostDest << ") # PtrCopy" + is_ali_str + "\n";
+                outFile << "!good(" << srcName << ", " << stmtPre << ") | good(" << ali << ", " << stmtPostDest << ") # " << callsite << "PtrCopy" + is_ali_str + "\n";
                 // null(src, S-pre) -> null(dest, S-post-dest)
-                outFile << "!null(" << srcName << ", " << stmtPre << ") | null(" << ali << ", " << stmtPostDest << ") # PtrCopy" + is_ali_str + "\n";
+                outFile << "!null(" << srcName << ", " << stmtPre << ") | null(" << ali << ", " << stmtPostDest << ") # " << callsite << "PtrCopy" + is_ali_str + "\n";
                 // (responsible(dest) && zombie(src, S-pre)) -> zombie(dest, S-post-dest)
-                outFile << "!zombie(" << srcName << ", " << stmtPre << ") | zombie(" << ali << ", " << stmtPostDest << ") # PtrCopy" + is_ali_str + "\n";
+                outFile << "!zombie(" << srcName << ", " << stmtPre << ") | zombie(" << ali << ", " << stmtPostDest << ") # " << callsite << "PtrCopy" + is_ali_str + "\n";
                 bool is_alias = true;
             }
         }
@@ -3592,6 +4038,7 @@ public:
         
         int stopDepth = getDeepPtrCopyStopDepth(destName, srcName);
         bool haveRealStopDepth = (stopDepth != MAX_PTR_DEPTH);
+        std::string callsite = (isa<CallInst>(args.inst) ? "Callsite: " : "");
         
         while (true) {
             if (haveRealStopDepth || seenCPaths.count(starPfx + destName) || seenCPaths.count(starPfx + srcName)) {
@@ -3604,18 +4051,18 @@ public:
 
                 if (!isDryRun) {
                     // responsible(*src) <-> responsible(*dest)
-                    outFile << "!responsible(" << starPfx << srcName << ") | responsible(" << starPfx << destName << ") # DeepPtrCopy\n";
-                    outFile << "responsible(" << starPfx << srcName << ") | !responsible(" << starPfx << destName << ") # DeepPtrCopy\n";
+                    outFile << "!responsible(" << starPfx << srcName << ") | responsible(" << starPfx << destName << ") # " << callsite << "DeepPtrCopy\n";
+                    outFile << "responsible(" << starPfx << srcName << ") | !responsible(" << starPfx << destName << ") # " << callsite << "DeepPtrCopy\n";
                     
                     // mut(*dest) -> mut(*src)
-                    outFile << "!mut(" << starPfx << destName << ") | mut(" << starPfx << srcName << ") # DeepPtrCopy\n";
+                    outFile << "!mut(" << starPfx << destName << ") | mut(" << starPfx << srcName << ") # " << callsite << "DeepPtrCopy\n";
 
                     for (CPath& alias_cpath : dest_loc_aliases) {
                         std::string dest_ali = cpath_to_str(alias_cpath);
                         // good(*src, S-pre) -> good(*dest, S-post-dest) and ditto for null and zombie
-                        outFile << "!good(" << starPfx << srcName << ", " << stmtPre << ") | good(" << starPfx << dest_ali << ", " << stmtPostDest << ") # DeepPtrCopy\n";
-                        outFile << "!null(" << starPfx << srcName << ", " << stmtPre << ") | null(" << starPfx << dest_ali << ", " << stmtPostDest << ") # DeepPtrCopy\n";
-                        outFile << "!zombie(" << starPfx << srcName << ", " << stmtPre << ") | zombie(" << starPfx << dest_ali << ", " << stmtPostDest << ") # DeepPtrCopy\n";
+                        outFile << "!good(" << starPfx << srcName << ", " << stmtPre << ") | good(" << starPfx << dest_ali << ", " << stmtPostDest << ") # " << callsite << "DeepPtrCopy\n";
+                        outFile << "!null(" << starPfx << srcName << ", " << stmtPre << ") | null(" << starPfx << dest_ali << ", " << stmtPostDest << ") # " << callsite << "DeepPtrCopy\n";
+                        outFile << "!zombie(" << starPfx << srcName << ", " << stmtPre << ") | zombie(" << starPfx << dest_ali << ", " << stmtPostDest << ") # " << callsite << "DeepPtrCopy\n";
                     }
                 }
 
@@ -3626,8 +4073,8 @@ public:
                 //    errs() << "Inst " << getInstructionId(*args.inst) << ": adding cpath " << (starPfx + srcName) << "\n";
                 //}
                 
-                seenCPaths.insert(starPfx + destName);
-                seenCPaths.insert(starPfx + srcName);
+                add_seen_cpath_str(starPfx + destName);
+                add_seen_cpath_str(starPfx + srcName);
 
                 starPfx += "*";
             } else {
@@ -3636,6 +4083,29 @@ public:
         }
     }
 
+    Value* trace_thru_pom_var_store(Value* var) {
+        CallInst* CI = dyn_cast<CallInst>(var);
+        if (!CI) {
+            return var;
+        }
+        Function *callee = CI->getCalledFunction();
+        if (callee->getName() != "__pom_var_store") {
+            return var;
+        }
+        if (CI->arg_size() != 1) {
+            return var;
+        }
+        return CI->getArgOperand(0);
+    }
+
+    bool isReallocInst(Value* inst) {
+        CallInst* CI = dyn_cast<CallInst>(inst);
+        if (!CI) {
+            return false;
+        }
+        Function *callee = CI->getCalledFunction();
+        return (callee->getName() == "realloc");
+    }
 
     void generateFlowConstraints(Instruction &fromInst, Instruction &toInst, 
                                bool isNullCondJump = false, /* whether this is jump conditioned on a nullness check */
@@ -3648,11 +4118,45 @@ public:
         std::string condPtr;
         std::vector<CPath> aliases_list;
         std::set<CPath> aliases_set;
+        Value* origAllocPtr = nullptr;
+        std::string origAllocPtrCPath;
+        std::vector<CPath> origAllocPtrAliasVec;
+        std::set<std::string> origAllocPtrAliasSet;
+        Value* reallocInst = nullptr;
+        //if (isa<BranchInst>(&fromInst) && !isDryRun) {
+        //    errs() << "Branch I" << getInstructionId(fromInst) << ": ";
+        //    fromInst.dump();
+        //}
         if (varComparedToNull != nullptr) {
             condPtr = getCPath(*varComparedToNull);
             getAliasesOf(parse_cpath(condPtr), false, &aliases_list);
             for (CPath alias : aliases_list) {
                 aliases_set.insert(alias);
+            }
+            reallocInst = trace_thru_pom_var_store(varComparedToNull);
+            if (isReallocInst(reallocInst)) {
+                origAllocPtr = dyn_cast<CallInst>(reallocInst)->getArgOperand(0);
+                origAllocPtrCPath = getCPath(*origAllocPtr);
+                getAliasesOf(parse_cpath(origAllocPtrCPath), true, &origAllocPtrAliasVec);
+                //if (!isDryRun) {
+                //    errs() << "Instruction I" << getInstructionId(fromInst) << ":\n";
+                //    errs() << "Got origAllocPtr: " << origAllocPtrCPath << "\n";
+                //    varComparedToNull->dump();
+                //    reallocInst->dump();
+                //}
+                for (CPath ali : origAllocPtrAliasVec) {
+                    //if (!isDryRun) {
+                    //    errs() << "  alias: " << cpath_to_str(ali) << "\n";
+                    //}
+                    origAllocPtrAliasSet.insert(cpath_to_str(ali));
+                }
+            } else {
+                //if (!isDryRun) {
+                //    errs() << "No realloc!\n";
+                //    varComparedToNull->dump();
+                //    reallocInst->dump();
+                //}
+                reallocInst = nullptr;
             }
             //if (!isDryRun) {
             //    errs() << "Borrows: \n" << dump_borrows_to_str(curBI) << "\n";
@@ -3688,6 +4192,18 @@ public:
                     if (baseVar != nullptr && baseVar != &fromInst && base_path != std::string("NULL_CONST") && currentLiveVars.count(baseVar) == 0) {
                         continue;
                     }
+                }
+
+                if (origAllocPtr && origAllocPtrAliasSet.count(cpath)) {
+                    std::string stmtReallocPre = getStatementLabel(*dyn_cast<CallInst>(reallocInst), "pre");
+                    if (conditionCode == BRANCH_WHERE_VAR_IS_NULL) {
+                        outFile << "!good(" << cpath << ", " << stmtReallocPre << ") | good(" << cpath << ", " << toPre << ") # Path where realloc fails and returns NULL\n";
+                    } else {
+                        outFile << "!good(" << cpath << ", " << stmtReallocPre << ") | zombie(" << cpath << ", " << toPre << ") # Path where realloc succeeds and returns non-NULL\n";
+                    }
+                    outFile << "!null(" << cpath << ", " << stmtReallocPre << ") | null(" << cpath << ", " << toPre << ")\n";
+                    outFile << "!zombie(" << cpath << ", " << stmtReallocPre << ") | zombie(" << cpath << ", " << toPre << ")\n";
+                    continue;
                 }
 
                 bool is_condPtr_alias = (varComparedToNull != nullptr) && aliases_set.count(parse_cpath(cpath));
@@ -3754,19 +4270,19 @@ public:
 
             if (!isExcluded) {
                 if (!isDryRun) {
-                    // good(x, S-post) <-> good(x, S-pre)
+                    // good(x, S-post) -> good(x, S-pre)
                     outFile << "!good(" << cpath << ", " << stmtPre << ") | good(" << cpath << ", " << stmtPost << ")\n";
-                    outFile << "!good(" << cpath << ", " << stmtPost << ") | good(" << cpath << ", " << stmtPre << ")\n";
                     
-                    // null(x, S-post) <-> null(x, S-pre)
+                    // null(x, S-post) -> null(x, S-pre)
                     outFile << "!null(" << cpath << ", " << stmtPre << ") | null(" << cpath << ", " << stmtPost << ")\n";
-                    outFile << "!null(" << cpath << ", " << stmtPost << ") | null(" << cpath << ", " << stmtPre << ")\n";
                     
-                    // zombie(x, S-post) <-> zombie(x, S-pre)
+                    // zombie(x, S-post) -> zombie(x, S-pre)
                     outFile << "!zombie(" << cpath << ", " << stmtPre << ") | zombie(" << cpath << ", " << stmtPost << ")\n";
-                    outFile << "!zombie(" << cpath << ", " << stmtPost << ") | zombie(" << cpath << ", " << stmtPre << ")\n";
                 }
             }
+        }
+        if (!isDryRun) {
+            outFile << "# End of preservation\n";
         }
     }
 
@@ -3806,6 +4322,17 @@ public:
     }
     
     std::string getCPath(Value &V) {
+
+        if (isa<Instruction>(&V) && already_renamed_cur_func_values) {
+            std::string ret = V.getName().str();
+            if (ret.empty()) {
+                errs() << "\nError: empty name for: ";
+                V.dump();
+                abort();
+            }
+            return ret;
+        }
+
         std::stringstream ss;
         
         // Try to get source variable name from debug info
@@ -3841,7 +4368,23 @@ public:
         if (!sourceName.empty()) {
             ss << replaceBadCharsInVarName(sourceName);
         } else if (inst_id) {
-            ss << "vI" << inst_id;
+            bool got_load_special = false;
+            //if (LoadInst* load = dyn_cast<LoadInst>(inst)) {
+            //    Value* ptr_value = load->getPointerOperand();
+            //    if (isa<Instruction>(ptr_value) && !isa<LoadInst>(ptr_value)) {
+            //        std::string ptr_name = getCPath(*ptr_value);
+            //        // Remove "_NNN" from the end.
+            //        size_t pos_underscore = ptr_name.find_last_of('_');
+            //        if (pos_underscore != std::string::npos) {
+            //            ptr_name.erase(pos_underscore);
+            //        }
+            //        ss << "star_" << ptr_name;
+            //        got_load_special = true;
+            //    }
+            //}
+            if (!got_load_special) {
+                ss << "vI" << inst_id;
+            }
         } else {
             ss << "temp";
         }
@@ -3873,7 +4416,7 @@ public:
     std::string getArgName(Argument* arg) {
         //return std::string("arg:") + std::to_string(arg->getArgNo()) + ":" + arg->getName().str();
         std::string prefix = GloUniq ? arg->getParent()->getName().str() + ":" : "";
-        return prefix + std::string("arg:") + arg->getName().str();
+        return prefix + std::string("arg:") + replaceBadCharsInVarName(arg->getName().str());
     }
 
     // Function to find a nearby instruction with valid debug location
@@ -4053,8 +4596,8 @@ namespace {
         ConstraintGenImpl impl;
         
         PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM) {
-            impl.runOnModule(M);
-            return PreservedAnalyses::all();
+            bool Modified = impl.runOnFunction(F);
+            return Modified ? PreservedAnalyses::none() : PreservedAnalyses::all();
         }
     };
 }

@@ -32,6 +32,9 @@ Functions:
           start:
           - NUL
           - VALID
+          end:
+          - NUL
+          - VALID
         resp: diligent
     locals:
       bar:

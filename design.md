@@ -798,6 +798,12 @@ char *function(struct foo_s* foo) {
 }
 ```
 
+#### A function can return a mutable irresponsible pointer, depending on an argument
+
+``` c
+char* loc = strchr(s, 'x'); // loc may be mutable if s is mutable.
+```
+
 ## Types That Contain Pointers
 
 In this section, we define a *composite type* is any type that can contain a pointer. Composite types consist of structs, unions, arrays, and pointers that contain a composite type, and pointer types. C often allows such objects to be created, and they are even more popular in C++.  We distinguish these from *non-composite types, which include structs, unions, and arrays that do not contain any pointers.  A composite object is an object of a composite type.  A responsible composite object is a composite object with at least one responsible pointer, and an irresponsible composite object is a composite object with at least one irresponsible pointer.

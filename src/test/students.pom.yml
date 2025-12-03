@@ -54,6 +54,7 @@ Functions:
         resp: diligent # always points to string literal
       students:
         type: array
+        mutable: true
         max: NUM_STUDENTS # 3
         referent:       # responsible pointers
           type: struct

@@ -577,6 +577,7 @@ Functions:
     return:
       lifetime:
       - dest
+      mutable: true_or_false
       resp: irresponsible
       start:
       - VALID
@@ -850,6 +851,7 @@ Functions:
     args:
       f:
         resp: diligent
+        mutable: true
         start:
         - VALID
       ipFlag:

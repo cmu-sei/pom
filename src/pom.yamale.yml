@@ -51,7 +51,7 @@ pom-element:
   min: any(int(), str(), required=False)
   max: any(int(), str(), required=False)
   lifetime: list(str(), required=False)
-  mutable: bool(required=False)
+  mutable: any(bool(), str(), required=False)
 
   referent: any(include('recursive-pom-element'), include('responsibility'), str(), required=False)
 
@@ -68,7 +68,7 @@ recursive-pom-element:
   min: any(int(), str(), required=False)
   max: any(int(), str(), required=False)
   lifetime: list(str(), required=False)
-  mutable: bool(required=False)
+  mutable: any(bool(), str(), required=False)
 
   referent: any(include('recursive-pom-element'), include('responsibility'), str(), required=False)
 

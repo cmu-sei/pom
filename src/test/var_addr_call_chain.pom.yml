@@ -47,8 +47,15 @@ Functions:
         mutable: true
         resp: irresponsible
         start:
-        - NUL
         - VALID
+        referent:
+          destructor: free
+          end:
+          - GOOD
+          - NUL
+          resp: responsible
+          start:
+          - GOOD
     locals: {}
     return: {}
   main:
@@ -57,6 +64,7 @@ Functions:
         resp: diligent
         start:
         - VALID
+        referent: diligent
     locals:
       p:
         mutable: true

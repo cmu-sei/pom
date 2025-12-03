@@ -30,9 +30,18 @@ import yaml
 from collections import OrderedDict, defaultdict
 import json
 import pdb
+import traceback
 stop = pdb.set_trace
 
 glo_lib_funcs = set()
+
+def represent_list(dumper, data):
+    # Use flow style (inline) for short lists with simple values
+    if len(data) <= 3 and all(isinstance(item, (str, int, float, bool, type(None))) for item in data):
+        return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
+    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=False)
+
+yaml.add_representer(list, represent_list)
 
 def parse_predicate_line(line):
     """Parse a single predicate line and return (predicate, path, timing, negated)."""
@@ -41,7 +50,7 @@ def parse_predicate_line(line):
         return None
     
     # Match patterns like: responsible(path), !mut(path), good(path, start)
-    match = re.match(r'^(!?)(\w+)\(([^,)]+)(?:,\s*([a-zA-Z0-9_*.\[\]]+))?\)$', line)
+    match = re.match(r'^(!?)(\w+)\(([^,)]+)(?:,\s*([a-zA-Z0-9_*.\[\]]+))?\)( = ([^#]*))?(#.*)?$', line)
     if not match:
         return None
     
@@ -49,8 +58,22 @@ def parse_predicate_line(line):
     predicate = match.group(2)
     path = match.group(3)
     timing = match.group(4)
+    rhs = match.group(6)
+    if rhs:
+        rhs = rhs.strip()
+        if negated:
+            sys.stderr.write("Error: cannot have both a negation ('!') and a RHS.\n")
+            sys.stderr.write(f"Offending line: {line}\n")
+            return None
+        if rhs.lower() == "true":
+            rhs = None
+        elif rhs.lower() == "false":
+            negated = True
+            rhs = None
+        elif rhs.lower() in ["unassigned", "unknown", "indeterminate"]:
+            return None
     
-    return (predicate, path, timing, negated)
+    return (predicate, path, timing, negated, rhs)
 
 def parse_path(path):
     """Parse a path like 'foo::args::bar' or '*foo::args::bar' into components."""
@@ -118,7 +141,7 @@ def build_structure_from_props(lines):
         if not parsed:
             continue
         
-        (predicate, path, timing, negated) = parsed
+        (predicate, path, timing, negated, rhs) = parsed
         path_info = parse_path(path)
         if not path_info:
             continue
@@ -134,24 +157,56 @@ def build_structure_from_props(lines):
             continue
         
         element = get_or_create_element(structure, func, section, var, depth)
+
+        def print_error(msg):
+            sys.stderr.write("Error: " + msg)
+            sys.stderr.write(f"Offending line: {line}\n")
         
         # Apply the predicate
         if predicate == 'responsible':
+            if rhs != None:
+                print_error(f"Invalid RHS '{rhs}' for predicate '{predicate}'\n")
+                continue
             element['resp'] = 'responsible' if not negated else 'irresponsible'
         elif predicate == 'mut':
-            element['mutable'] = not negated
+            if rhs == None:
+                rhs = not negated
+            else:
+                m = re.match("^mut[(]([A-Za-z0-9_]+)[)]$", rhs)
+                if not m:
+                    print_error(f"Invalid RHS '{rhs}'\n")
+                else:
+                    rhs_arg = m.group(1)
+                    rhs_arg_elem = get_or_create_element(structure, func, section, rhs_arg, depth=0)
+                    if "mutable" not in rhs_arg_elem:
+                        rhs_arg_elem["mutable"] = "true_or_false"
+                    rhs = "=" + rhs
+            element['mutable'] = rhs
         elif predicate == "borrows_from":
-            element.setdefault("lifetime", []).append(timing)
+            if rhs != None:
+                print_error(f"Invalid RHS '{rhs}' for predicate '{predicate}'\n")
+                continue
+            if not negated:
+                element.setdefault("lifetime", []).append(timing)
+            else:
+                element.setdefault("lifetime", [])
+                if timing in element["lifetime"]:
+                    element["lifetime"].remove(timing)
         elif predicate in ['good', 'null', 'zombie']:
-            if timing:
-                if timing not in element:
-                    element[timing] = []
-                state = predicate.upper() if predicate != 'null' else 'NUL'
-                if negated and state == "NUL":
-                    state = "NOT_NULL"
-                    negated = False
-                if state not in element[timing] and not negated:
-                    element[timing].append(state)
+            if rhs != None:
+                print_error(f"Invalid RHS '{rhs}' for predicate '{predicate}'\n")
+                continue
+            if timing not in ["start", "end"]:
+                sys.stderr.write(f"Invalid time point '{timing}'\n")
+                sys.stderr.write(f"Offending line: {line}\n")
+                continue
+            if timing not in element:
+                element[timing] = ["GOOD"] # Include "GOOD" by default, unless specifically marked as false.
+            state = predicate.upper() if predicate != 'null' else 'NUL'
+            if state not in element[timing] and not negated:
+                element[timing].append(state)
+            if state in element[timing] and negated:
+                element[timing].remove(state)
     
     return structure
 
@@ -172,19 +227,12 @@ def clean_element(element):
         if 'mutable' in element:
             del element['mutable']
     
-    # Remove good/null/zombie from irresponsible places
+    # Translate GOOD <-> VALID and ZOMBIE <-> INVALID
     for time_pt in ['start', 'end']:
         if time_pt in element:
             if resp == 'irresponsible':
-                if element[time_pt] == ["NOT_NULL"]:
-                    element[time_pt] = ["VALID"]
-                elif element[time_pt] == ["NUL"]:
-                    element[time_pt] = ["VALID", "NUL"]
-                else:
-                    sys.stderr.write("Warning: Unexpected state list for irresp: " + repr(element[time_pt]) + "\n")
-                    del element[time_pt]
-            else:
-                element[time_pt] = [x for x in element[time_pt] if x != "NOT_NULL"]
+                translation = {"GOOD":"VALID", "ZOMBIE":"INVALID"}
+                element[time_pt] = [translation.get(x, x) for x in element[time_pt]]
             
     # Clean referent recursively
     if 'referent' in element:
@@ -299,8 +347,12 @@ def main():
         yaml_content = convert_props_to_yaml(props_content)
     except (DummyException if args.debug else Exception) as e:
         print(f"Error converting props to YAML: {e}", file=sys.stderr)
+        traceback.print_exc()
         sys.exit(1)
     
+    # Add a blank line before each function
+    yaml_content = re.sub(r'(?m)(?=^  [^ ])', '\n', yaml_content)
+
     # Write output
     if args.output:
         try:

@@ -26,6 +26,7 @@
 import yaml
 import os, sys
 import argparse
+import re
 import pdb
 stop = pdb.set_trace
 
@@ -44,10 +45,18 @@ def process_element(element, path, output_lines):
     
     if not isinstance(element, dict):
         return
-    
+
+    if element == {}:
+        return
+
+    def print_error(msg):
+        sys.stderr.write(msg)
+        output_lines.append("# " + msg.rstrip())
+
     # Handle responsibility property and default mutability
     resp = None
     is_mut = None
+    missing_preds = []
     mut_default_by_resp = {
         "producer": True,
         "diligent": False,
@@ -58,66 +67,129 @@ def process_element(element, path, output_lines):
         resp = element['resp']
         is_mut = mut_default_by_resp.get(resp)
         if resp in ["irresponsible", "diligent", "producer"]:
+            #if resp == "producer" and glo.use_default_states:
+            #    sub_elem = element
+            #    while 'referent' in sub_elem:
+            #        sub_elem = sub_elem['referent']
+            #        if "start" not in sub_elem:
+            #            if sub_elem.get("resp") == "responsible":
+            #                sub_elem["start"] = ["NULL", "ZOMBIE"]
+            #            else:
+            #                sub_elem["start"] = ["GOOD", "NULL", "ZOMBIE"]
+            #        if "end" not in sub_elem:
+            #            sub_elem["end"] = ["GOOD"]
             resp = "!responsible"
+        elif resp != "responsible":
+            print_error(f"Error: Bad value for 'resp': '{resp}' (path: {path})\n")
+            missing_preds.append("responsible")
         output_lines.append(f"{resp.lower()}({path})")
     
     # Handle mutability property
+    got_valid_mut = False
     if 'mutable' in element:
         is_mut = element['mutable']
     if is_mut is None:
-        if not path.endswith("::return"):
-            sys.stderr.write(f"Warning: no mutability for {path}.\n")
+        print_error(f"Warning: no mutability for {path}.\n")
     else:
-        output_lines.append(("" if is_mut else "!") + f"mut({path})")
+        if is_mut in [True, False]:
+            output_lines.append(("" if is_mut else "!") + f"mut({path})")
+            got_valid_mut = True
+        elif type(is_mut)==str and is_mut in ["varies", "true_or_false"]:
+            glo.arg_mut[path.split(":")[-1]] = "varies"
+            got_valid_mut = True
+        elif type(is_mut)==str:
+            m = re.match("^=?(mut|mutable)[(]([A-Za-z0-9_]+)[)]$", is_mut.strip())
+            if not m:
+                print_error(f"Invalid RHS '{is_mut}' specified for mutability of path {path}\n")
+            else:
+                rhs_arg = m.group(2)
+                if glo.arg_mut.get(rhs_arg) != "varies":
+                    print_error(f"Warning: mutability of {path} depends on mut({rhs_arg}), but mut({rhs_arg}) is not declared 'varies'/'true_or_false'.\n")
+                output_lines.append(f"mut({path}) = mut({rhs_arg})")
+                got_valid_mut = True
+        else:
+            print_error(f"Error for '{path}': bad value for 'mutable'.\n")
+
+    if not got_valid_mut:
+        missing_preds.append("mut")
     
     # Handle lifetime property
     if 'lifetime' in element and ("::locals::" not in path):
         path_parts = path.split("::")
         func_name = path_parts[0].replace("*","")
         for src in element['lifetime']:
+            if src == "static":
+                if is_mut and 'referent' in element:
+                    print_error(f"Warning: static lifetime for mutable pointers-to-pointers is not supported ({path}).\n")
+                continue
             output_lines.append(f"borrows_from({path}, {src})")
 
     # Handle argument index
     if 'arg_idx' in element:
         path_parts = path.split("::")
         if len(path_parts) != 3 or path_parts[1] != "args":
-            sys.stderr.write(f"Warning: Unexpected 'arg_idx' attribute in {path}!\n")
+            print_error(f"Warning: Unexpected 'arg_idx' attribute in {path}!\n")
         else:
             func_name = path_parts[0]
             arg_name = path_parts[2]
             glo.func_arg_index_names.append((func_name, element['arg_idx'], arg_name))
     
+    # Fixup for return value
+    if path.endswith("::return"):
+        if "start" in element:
+            if "end" in element:
+                print_error("Error: return has both start and end states!\n")
+            else:
+                element["end"] = element["start"]
+            del element["start"]
+
+    # Default to end=start if end is not specified
+    if ("end" not in element) and ("start" in element):
+        element["end"] = element["start"]
+    
     # Handle start and end states at this level
     for timing in ['start', 'end']:
+        if ("::locals::" in path or "struct::" in path):
+            continue
+        if timing=="end" and ("::args::" in path) and not (path.startswith("*") or path.endswith("[0]")):
+            # The end state of an argument (but not the referent of an arg) is not needed.
+            continue
+        if path.endswith("::return") and timing == "start":
+            continue
         if (timing not in element):
-            continue
-        if ("::locals::" in path):
-            continue
+            if path in ["main::args::argv", "*main::args::argv"]:
+                element[timing] = ["GOOD"]
+            elif glo.use_default_states:
+                states = ["GOOD"]
+                element[timing] = states
+            else:
+                missing_preds.append(timing)
+                continue
         states = element[timing]
-        if path.endswith("::return"):
-            if timing == "start":
-                if "end" in element:
-                    sys.stderr.write("Error: return has both start and end states!")
-                else:
-                    timing = "end"
         if not isinstance(states, list):
-            sys.stderr.write("Warning: %r is not a list!\n" % states)
+            print_error("Error: %r is not a list!\n" % states)
+            missing_preds.append(timing)
             continue
-        if (resp == "responsible"):
-            states = list([x.lower() for x in states])
-            for (ix, state) in enumerate(states):
-                if state == "nul":
-                    state = "null"
-                    states[ix] = state
-                output_lines.append(f"{state}({path}, {timing})")
-            for poss_state in ["good", "null", "zombie"]:
-                if poss_state not in states:
-                    output_lines.append(f"!{poss_state}({path}, {timing})")
-        else:
-            if "NUL" not in str(states).upper():
-                output_lines.append(f"!null({path}, {timing})")
-            
-                        
+        if resp != "responsible":
+            translation = {"VALID":"GOOD", "INVALID":"ZOMBIE"}
+            states = [translation.get(x.upper(), x) for x in states]
+        states = list([x.lower() for x in states])
+        for (ix, state) in enumerate(states):
+            if state == "nul":
+                state = "null"
+                states[ix] = state
+            if state not in ["good", "null", "zombie"]:
+                print_error(f"Error: Unrecognized state '{state}' (path: {path})!\n")
+            output_lines.append(f"{state}({path}, {timing})")
+        for poss_state in ["good", "null", "zombie"]:
+            if poss_state not in states:
+                output_lines.append(f"!{poss_state}({path}, {timing})")
+    if element.get("type") in ["array"]:
+        output_lines.append(f"# Warning: {path}: arrays are not supported!")
+    else:
+        for pred in missing_preds:
+            missing_line = f"{pred}({path}) = missing!"
+            output_lines.append(missing_line.ljust(39) + f" # {glo.cur_file}")
     
     # Handle referent (what this pointer points to)
     if 'referent' in element:
@@ -127,6 +199,8 @@ def process_element(element, path, output_lines):
 
 def process_function(func_name, func_data, output_lines, opts):
     """Process a function and its arguments and return value."""
+
+    glo.arg_mut = {}
     
     # Process arguments
     if 'args' in func_data:
@@ -200,6 +274,7 @@ def main(argv=None):
     parser.add_argument('input', nargs='*', help='Input YAML files (default: stdin if none provided)')
     parser.add_argument('-o', '--output', help='Output props file (default: stdout)')
     parser.add_argument('-a', '--arg-name-file', type=str, help='Output file mapping arg index to arg name')
+    parser.add_argument('--use-default-states', type=str, help='Use default values for start and end if they are absent (also env var POM_USE_DEFAULT_STATES)')
     parser.add_argument('--locals', type=str, help='Process local vars too (default: env var POM_YAML_LOCALS)')
     
     args = parser.parse_args(argv)
@@ -214,6 +289,12 @@ def main(argv=None):
         "0": False, "false": False, "no": False,
         "1": True, "true": True, "yes": True
     }
+
+    if args.use_default_states != None:
+        glo.use_default_states = args.use_default_states
+    else:
+        glo.use_default_states = os.getenv("POM_USE_DEFAULT_STATES", default="True")
+    glo.use_default_states = str_to_bool_map.get(glo.use_default_states.lower(), True)
 
     # Determine whether to process local variables
     include_locals = True
@@ -233,6 +314,7 @@ def main(argv=None):
     
     if not args.input:  # No input files provided, read from stdin
         yaml_content = sys.stdin.read()
+        glo.cur_file = "<stdin>"
         props_content = convert_yaml_to_props(yaml_content, {"include_locals": include_locals})
         if props_content is None:
             sys.exit(1)
@@ -246,6 +328,7 @@ def main(argv=None):
                 print(f"Error reading input file {input_file}: {e}", file=sys.stderr)
                 sys.exit(1)
             
+            glo.cur_file = input_file
             props_content = convert_yaml_to_props(yaml_content, {"include_locals": include_locals})
             if props_content is None:
                 sys.exit(1)

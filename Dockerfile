@@ -44,12 +44,9 @@ RUN apt-get update \
     && apt-get clean
 
 # Clang (v15)
-# Yes, we are installing vanilla clang 15 so that we can use it to build our enhanced clang-15.
-# And we are using clang-tidy v16, but everything else should be v15
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
         clang-15 clang-tools-15 libclang-15-dev libclang1-15 clang-format-15 python3-clang-15 clangd-15 \
-        clang-tidy-16 \
         llvm-15-dev cmake \
     && apt-get --purge -y autoremove \
     && apt-get clean \
@@ -60,7 +57,7 @@ RUN apt-get update \
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
          bear sqlite3 po4a python3-pytest python3-pip iputils-ping iputils-tracepath patchutils \
-         ninja-build lld zlib1g-dev libtinfo-dev libxml2-dev \
+         ninja-build lld zlib1g-dev libtinfo-dev libxml2-dev less \
          cryptominisat minisat \
     && apt-get --purge -y autoremove \
     && apt-get clean
@@ -75,26 +72,15 @@ RUN apt-get update \
 # org's certs here
 RUN /usr/sbin/update-ca-certificates
 
+
+
 #####################################################################
 #
-# modified clang based on 15.0.7
+# install Python packages
 #
 #####################################################################
-RUN mkdir /opt/clang && \
-    git clone --depth=1 --branch llvmorg-15.0.7 https://github.com/llvm/llvm-project.git /opt/clang
 
-# modified AST traverser required to be compiled into clang
-COPY /clang-code/*.h /opt/clang/clang/include/clang/AST/
-COPY /clang-code/*.cpp /opt/clang/clang/lib/AST/
-
-RUN mkdir /opt/clang/build && \
-    cmake -G Ninja -S/opt/clang/llvm -B/opt/clang/build -DLLVM_ENABLE_PROJECTS="clang" -DLLVM_USE_LINKER=lld -DLLVM_BUILD_TESTS=OFF -DLLVM_TARGETS_TO_BUILD="X86" -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_LIBDIR_SUFFIX=64 -DCMAKE_BUILD_TYPE=Release && \
-    ninja -C /opt/clang/build
-
-# note: clang is built in /opt/clang/build/bin
-
-COPY requirements.txt /opt
-RUN pip install  --no-cache-dir --break-system-packages  -r /opt/requirements.txt
+RUN pip install  --no-cache-dir --break-system-packages  yamale aiofiles openai
 
 
 #####################################################################
@@ -109,6 +95,7 @@ COPY src/pom.yamale.yml /opt/pom/pom.yamale.yml
 ENV PATH="/opt/pom/bash-scripts:$PATH"
 ENV PYTHONPATH="/host/src"
 ENV CLANG_VER=15
+ENV LLVM_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer-$CLANG_VER"
 
 # Extras for the SAT Solver
 RUN mkdir /opt/drat-trim && \

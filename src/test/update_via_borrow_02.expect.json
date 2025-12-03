@@ -1,0 +1,6 @@
+{
+  "function-satisfiability": {
+    "malloc_or_die": "SATISFIABLE",
+    "main": "SATISFIABLE"
+  }
+}

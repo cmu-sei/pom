@@ -42,6 +42,7 @@ import asyncio
 from openai import AsyncOpenAI # pip install --upgrade openai
 
 import yaml
+import yamale
 
 from util import *
 from verify import *
@@ -49,8 +50,41 @@ from ask_gpt import run_tasks
 
 verbose: bool = False
 
+POM_SCHEMA_FILE = os.environ.get("POM_SCHEMA_FILE", "/host/src/pom.yamale.yml")
+POM_SCHEMA = yamale.make_schema(POM_SCHEMA_FILE)
+INVALID_RETRIES = 5
+
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+
+def validate_pom_file(pom_file_path: str) -> bool:
+    """
+    Validate that the POM file passed in complies with the POM schema.
+
+    :param pom_file_path: Filename of the POM file to validate
+    :returns: True if the file exists is valid; False otherwise
+    """
+    pom_data = yamale.make_data(pom_file_path)
+    if (
+        not pom_data
+        or not pom_data[0]
+        or not isinstance(pom_data[0], tuple)
+        or not pom_data[0][0]
+    ):
+        logger.error(f"POM file '{pom_file_path}' is empty or malformed.")
+        return False
+    try:
+        yamale.validate(POM_SCHEMA, pom_data)
+        logger.info(f"POM file '{pom_file_path}' validated successfully.")
+        return True
+    except yamale.YamaleError as e:
+        logger.error(f"POM file '{pom_file_path}' failed validation.")
+        for result in e.results:
+            logger.warning(f"Validation error: {result}")
+        return False
+
 
 def parse_args() -> argparse.Namespace:
     """Set up and parse command-line arguments."""
@@ -110,6 +144,7 @@ class FuncVisitor(AstVisitor):
                 or current_file
         if not filename:
             return
+        current_file = filename
 
         if verbose:
             log("filename is " + str(filename) + " for node " + str(node["name"]))
@@ -252,6 +287,7 @@ def cache_srcs(cache: str, func_bounds: list[FuncBoundsType], source_dir: str) -
     src_dir.mkdir(parents=True, exist_ok=True)
     srcs = {}
     for (filename, begin_line, end_line, fn_name) in func_bounds:
+        filename = Path(filename).name
         if filename not in srcs.keys():
             with Path(source_dir, filename).open('r', encoding='utf-8') as f:
                 src_data = f.readlines()
@@ -355,11 +391,25 @@ async def main() -> None:
     cache_srcs(args.cache, fn_bounds, source_dir)
     cache_prompts(args.cache, fn_bounds)
     filter_prompts(args.cache, pom)
-    await get_llm_answers(args.cache)
-    update_pom_from_answers(args.cache, pom)
-    with open(args.pom_file, 'w') as f:
-        yaml.dump(pom, f, default_flow_style=False)
 
+    for try_num in range(INVALID_RETRIES):
+        await get_llm_answers(args.cache)
+        update_pom_from_answers(args.cache, pom)
+        with open(args.pom_file, 'w') as f:
+            yaml.dump(pom, f, default_flow_style=False)
+
+        # Validate the POM file
+        pom_file_is_valid = validate_pom_file(args.pom_file)
+        if pom_file_is_valid:
+            sys.exit(0)
+        else:
+            if try_num < INVALID_RETRIES - 1:
+                logger.warning("Produced invalid POM file; will retry")
+            else:
+                logger.warning("Produced invalid POM file")
+
+    logger.error("Too many retries; aborting")
+    sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main())

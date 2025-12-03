@@ -300,14 +300,14 @@ def generate_constraints_file(
     # Use argnames_file for generating LLVM constraints
     if clang_ver and int(clang_ver) >= 17:
         run_command(
-            f"opt-{clang_ver}  -load-pass-plugin {SCRIPT_DIR}/constraint_gen/VarStorePass.so  -passes=var-store,mem2reg {ll_file}  -S  -o {ll_ssa_file}"
+            f"opt-{clang_ver}  -load-pass-plugin {SCRIPT_DIR}/constraint_gen/VarStorePass.so  -passes=globalopt,sccp,dce,var-store,mem2reg {ll_file}  -S  -o {ll_ssa_file}"
         )
         run_command(
             f"opt-{clang_ver}  -load-pass-plugin {SCRIPT_DIR}/constraint_gen/ConstraintGenPass.so  -passes=constraint-gen  -output {output_dir}/constraints.txt  {LLVM_OPTS}  -pom-props {pom_constraints}   -arg-name-file {argnames_file}  -numir {output_dir}/numbered_ir.txt  {ll_ssa_file}  -S  -o /dev/null"
         )
     else:
         run_command(
-            f"opt-15  -enable-new-pm=0  -load {SCRIPT_DIR}/constraint_gen/VarStorePass.so  -var-store  -mem2reg {ll_file}  -S  -o {ll_ssa_file}"
+            f"opt-15  -enable-new-pm=0  -load {SCRIPT_DIR}/constraint_gen/VarStorePass.so -globalopt -sccp -dce  -var-store  -mem2reg {ll_file}  -S  -o {ll_ssa_file}"
         )
         run_command(
             f"opt-15  -enable-new-pm=0  -load {SCRIPT_DIR}/constraint_gen/ConstraintGenPass.so  -constraint-gen  -output {output_dir}/constraints.txt  {LLVM_OPTS}    -pom-props {pom_constraints}  -arg-name-file {argnames_file}  -numir {output_dir}/numbered_ir.txt  {ll_ssa_file}  -S  -o /dev/null"

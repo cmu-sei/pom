@@ -79,7 +79,10 @@ def run_test_solver(basename, cmdline_args):
             )
             raw_actual_text_output = result.stdout
         else:
-            raw_actual_text_output = run_solver.call_and_capture_stdout(lambda: run_solver.main(shlex.split(args_for_run_solver)))
+            try:
+                raw_actual_text_output = run_solver.call_and_capture_stdout(lambda: run_solver.main(shlex.split(args_for_run_solver)))
+            except Exception as e:
+                sys.stderr.write(str(e) + "\n")
         raw_actual_output = {}
         actual_output = {}
         try:

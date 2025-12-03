@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # <legal>
 # Pointer Ownership Model (POM) Source Code Release
 # 
@@ -41,6 +41,10 @@ if [[ "$2" = "-o" ]]; then
     OUT_DIR=$3
 fi
 
+if [ "$3" != "--no-solve" ]; then
+    rm -f $OUT_DIR/solution.txt
+fi
+
 # Check that the input file exists
 if [ ! -f "$LL_FILE" ]; then
   echo "Error: input file '$LL_FILE' not found."
@@ -77,30 +81,51 @@ elif [[ $LL_FILE == *.ll ]]; then
 fi
 
 FUNC_ARG=${FUNC:+--func $FUNC}
-POM_PROPS_ARG=${POM_FILE:+-pom-props $OUT_DIR/pom.constraints.txt -arg-name-file $OUT_DIR/argnames.txt}
 if [ ! -z "$POM_FILE" ]; then
-    $SCRIPT_DIR/pom_yaml_to_props.py $POM_FILE --arg-name-file $OUT_DIR/argnames.txt > $OUT_DIR/pom.constraints.txt
+    PROPS_FILE=$OUT_DIR/pom.constraints.txt
+    ARG_NAMES_FILE=$OUT_DIR/argnames.txt
+    $SCRIPT_DIR/pom_yaml_to_props.py $POM_FILE --arg-name-file $ARG_NAMES_FILE > $PROPS_FILE
 fi
+if [ ! -z "$PROPS_FILE" ]; then
+    POM_PROPS_ARG="-pom-props $PROPS_FILE"
+    if [ ! -z "$ARG_NAMES_FILE" ]; then
+        POM_PROPS_ARG="$POM_PROPS_ARG -arg-name-file $ARG_NAMES_FILE"
+    fi
+fi
+source $SCRIPT_DIR/llvm_pass_list.sh
 if [ "$CLANG_VER" == "18" ]; then
-    opt-$CLANG_VER -load-pass-plugin $SCRIPT_DIR/VarStorePass.so -passes=var-store,mem2reg $LL_FILE -S -o $LL_SSA_FILE
+    opt-$CLANG_VER $CLANG_18_INITIAL_LOADS $CLANG_18_INITIAL_PASSES $LL_FILE -S -o $LL_SSA_FILE
     opt-$CLANG_VER -load-pass-plugin $SCRIPT_DIR/ConstraintGenPass.so -passes=constraint-gen -output $OUT_DIR/constraints.txt $LLVM_OPTS -numir $OUT_DIR/numbered_ir.txt $LL_SSA_FILE $POM_PROPS_ARG -S -o /dev/null
 else
-    opt-15 -enable-new-pm=0 -load $SCRIPT_DIR/VarStorePass.so -var-store -mem2reg $LL_FILE -S -o $LL_SSA_FILE
-    opt-15 -enable-new-pm=0 -load $SCRIPT_DIR/ConstraintGenPass.so -constraint-gen -output $OUT_DIR/constraints.txt $LLVM_OPTS -numir $OUT_DIR/numbered_ir.txt $LL_SSA_FILE $POM_PROPS_ARG -S -o /dev/null
+    if [ -z "$NO_SSA_FILE" ]; then
+        opt-15 -enable-new-pm=0 $CLANG_15_INITIAL_LOADS $CLANG_15_INITIAL_PASSES $LL_FILE -S -o $LL_SSA_FILE
+        opt-15 -enable-new-pm=0 -load $SCRIPT_DIR/ConstraintGenPass.so -constraint-gen -output $OUT_DIR/constraints.txt $LLVM_OPTS -numir $OUT_DIR/numbered_ir.txt $LL_SSA_FILE $POM_PROPS_ARG -S -o /dev/null
+    else
+        opt-15 -enable-new-pm=0 $CLANG_15_INITIAL_LOADS -load $SCRIPT_DIR/ConstraintGenPass.so $CLANG_15_INITIAL_PASSES $LL_FILE -constraint-gen -output $OUT_DIR/constraints.txt $LLVM_OPTS -numir $OUT_DIR/numbered_ir.txt $POM_PROPS_ARG -S -o /dev/null
+    fi
 fi
-if [ ! -z "$POM_FILE" ]; then
-    $SCRIPT_DIR/pom_yaml_to_props.py $POM_FILE >> $OUT_DIR/constraints.txt
+if [ ! -z "$CONV_DIMACS_COPROC_STDIN" ]; then
+    echo "$FUNC_ARG $OUT_DIR/constraints.txt -v $OUT_DIR/var_map.json -o $OUT_DIR/constraints.dimacs" >&"$CONV_DIMACS_COPROC_STDIN"
+    IFS= read -r reply <&"$CONV_DIMACS_COPROC_STDOUT"
+else
+    python3 $SCRIPT_DIR/conv_dimacs.py $FUNC_ARG $OUT_DIR/constraints.txt -v $OUT_DIR/var_map.json -o $OUT_DIR/constraints.dimacs
 fi
-python3 $SCRIPT_DIR/conv_dimacs.py $FUNC_ARG $OUT_DIR/constraints.txt -v $OUT_DIR/var_map.json -o $OUT_DIR/constraints.dimacs
+
 
 if [ "$3" != "--no-solve" ]; then
     set +e
     RAND_SEED_ARG=${RAND_SEED:+-rnd-seed=$RAND_SEED}
-    minisat $OUT_DIR/constraints.dimacs $RAND_SEED_ARG $OUT_DIR/solution.txt
+    if [ ! -z "$QUIET_MINISAT" ]; then
+        minisat $OUT_DIR/constraints.dimacs $RAND_SEED_ARG $OUT_DIR/solution.txt | grep SAT
+    else
+        minisat $OUT_DIR/constraints.dimacs $RAND_SEED_ARG $OUT_DIR/solution.txt
+    fi
     first_line=$(head -n 1 "$OUT_DIR/solution.txt")
     if [ "$first_line" == "SAT" ]; then
-        python3 $SCRIPT_DIR/conv_dimacs.py $OUT_DIR/solution.txt -v $OUT_DIR/var_map.json -o $OUT_DIR/solution.json --from-sol
-        echo "Solution written to $OUT_DIR/solution.json"
+        if [ "$3" != "--no-solution-json" ]; then
+            python3 $SCRIPT_DIR/conv_dimacs.py $OUT_DIR/solution.txt -v $OUT_DIR/var_map.json -o $OUT_DIR/solution.json --from-sol
+            echo "Solution written to $OUT_DIR/solution.json"
+        fi
     elif [ "$first_line" == "UNSAT" ]; then
         echo "Unsatisfiable!"
     else

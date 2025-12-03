@@ -42,15 +42,15 @@ global cmdline_args
 Clause = namedtuple('Clause', ['lits', 'priority', 'comment'])
 
 pri_cat_levels = [
-    ["flow", "basic", "zombie_arg"],
+    ["flow", "basic"],
     ["ptr_copy"],
     ["ali_ptr_copy"],
-    ["uninit", "mut", "move_resp", "copy_zombie"],
-    ["deref_zombie", "mut_via_immut", "resp_from_irresp", "double_free"],
+    ["uninit", "mut", "move_resp", "copy_zombie", "zombie_arg"],
+    ["deref_zombie", "mut_via_immut", "resp_from_irresp", "double_free", "invalid_free"],
     ["borrow"],
     ["null_deref"],
-    ["caller_demands"],
     ["mem_leak"],
+    ["caller_demands"],
 ]
 pri_cat_to_pri_num = {}
 for (idx, categories) in enumerate(pri_cat_levels):
@@ -110,17 +110,27 @@ def negate_lit(lit):
     else:
         return "!" + lit
 
+def is_neg_lit(lit):
+    return lit.startswith("!")
+
 forced_lit_color_code = "0;255;0"
 
 def color_forced_lit(text):
+    if forced_lit_color_code == 'none':
+        return text
     return "\033[38;2;" + forced_lit_color_code + "m" + text + "\033[0m"
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Examines unsat core')
     parser.add_argument("input_file", type=str, help="Input file (unsat core)")
     parser.add_argument("--keep-filename", action="store_true", help="Don't remove the filename from var names")
-    parser.add_argument("--color-forced-lit", type=str, help="Color for forced literal (format: 'R;G;B') (default: '0;255;0')")
+    parser.add_argument("--color-forced-lit", type=str, help="Color for forced literal (format: 'R;G;B' or 'none') (default: '0;255;0')")
+    parser.add_argument("-a", "--write-asgn", type=str, help="Mode to generate an assignment and write to specified file ('-' for stdout)")
+    parser.add_argument("-s", "--show-forcing", action="store_true", help="Show forcing clauses even in assignment mode")
     cmdline_args = args = parser.parse_args(argv)
+
+    if not args.write_asgn:
+        args.show_forcing = True
 
     if args.color_forced_lit:
         global forced_lit_color_code
@@ -142,16 +152,21 @@ def main(argv=None):
     #    print(clause)
     max_pri = len(pri_cat_levels)
     clauses_by_pri = defaultdict(list)
+    all_vars = set()
     for clause in clause_list:
         clauses_by_pri[clause.priority].append(clause)
+        for lit in clause.lits:
+            all_vars.add(var_of_lit(lit))
     cur_asgn = {}
     forced_by = {}
     is_done = False
     is_dirty = True
-    print("\n" + ("#" * 80))
+    if not args.write_asgn:
+        print("\n" + ("#" * 80))
     next_cl_num = 1
+    seen_falsified_clauses = set()
     while True:
-        if is_done or not is_dirty:
+        if (is_done and not args.write_asgn) or not is_dirty:
             break
         is_dirty = False
         for cur_pri in range(1, max_pri+1):
@@ -162,8 +177,14 @@ def main(argv=None):
                 if reduced_cl is True:
                     continue
                 if reduced_cl is False:
+                    if tuple(cur_cl.lits) not in seen_falsified_clauses:
+                        print(f"{next_cl_num:3}: Falsified: " + " | ".join(f"{forced_by[x]}:" + shorten(x) for x in cur_cl.lits) + " # " + cur_cl.comment) # + f" # Pri {cur_cl.priority}"
+                        next_cl_num += 1
+                        seen_falsified_clauses.add(tuple(cur_cl.lits))
+                    if args.write_asgn:
+                        continue
                     is_done = True
-                    print(f"{next_cl_num:3}: Falsified: " + " | ".join(f"{forced_by[x]}:" + shorten(x) for x in cur_cl.lits) + " # " + cur_cl.comment) # + f" # Pri {cur_cl.priority}"
+                    is_dirty = True
                     break
                 if len(reduced_cl) == 1:
                     forced_lit = reduced_cl[0]
@@ -172,18 +193,39 @@ def main(argv=None):
                     forced_by[forced_lit] = next_cl_num
                     forced_by[negate_lit(forced_lit)] = next_cl_num
                     is_dirty = True
-                    clause_text = " | ".join(("forced:"+color_forced_lit(shorten(lit)) if lit == forced_lit else f"{forced_by[lit]}:" + shorten(lit)) for lit in cur_cl.lits)
-                    print(f"{next_cl_num:3}: {clause_text} # " + cur_cl.comment)
+                    if args.show_forcing:
+                        clause_text = " | ".join(("forced:"+color_forced_lit(shorten(lit)) if lit == forced_lit else f"{forced_by[lit]}:" + shorten(lit)) for lit in cur_cl.lits)
+                        print(f"{next_cl_num:3}: {clause_text} # " + cur_cl.comment) # + f" # Pri {cur_cl.priority}"
                     next_cl_num += 1
                     #print(f"Literal {forced_lit} forced by clause: " + clause_text + " # " + cur_cl.comment)
                     break
 
-    if not is_done:
+    if (not is_done) and (not args.write_asgn):
         print("\nRemaining clauses:")
         for cur_cl in clause_list:
             print(" | ".join(cur_cl.lits) + " # " + cur_cl.comment)
             #reduced_cl = subst_under_asgn(cur_cl.lits, cur_asgn)
-            
+    
+    if args.write_asgn:
+        unassigned_vars = set(all_vars)
+        def is_dummy_var(var):
+            return re.match("^[a-z]+[(]NULL_CONST,", var)
+        def write_asgn_to_file(outfile):
+            for (lit, sign) in cur_asgn.items():
+                if is_neg_lit(lit):
+                    continue
+                if not is_dummy_var(lit):
+                    outfile.write(f"{lit} = {sign}\n")
+                unassigned_vars.discard(lit)
+            for lit in sorted(unassigned_vars):
+                if not is_dummy_var(lit):
+                    outfile.write(f"{lit} = unassigned\n")
+        if args.write_asgn in ["-", "stdout"]:
+            write_asgn_to_file(sys.stdout)
+        else:
+            with open(args.write_asgn, "w") as outfile:
+                write_asgn_to_file(outfile)
+                
                     
 
 
@@ -195,7 +237,7 @@ def read_unsat_core_file(filename):
         for line in in_file:
             line_num += 1
             line = line.strip()
-            if line.strip() == "" or line.startswith("#"):
+            if line.strip() == "" or line.startswith("#") or line.startswith("<"):
                 continue
             comment = ""
             if "#" in line:
@@ -215,8 +257,8 @@ def read_unsat_core_file(filename):
                     pri_cat = "flow"
                 elif "leak" in comment:
                     pri_cat = "mem_leak"
-                elif comment.startswith("PtrCopy") or comment.startswith("DeepPtrCopy"):
-                    if "# Callsite" in comment:
+                elif comment.__contains__("PtrCopy"):
+                    if "Callsite" in comment and "::" in line:
                         pri_cat = "caller_demands"
                     elif "(alias)" in comment:
                         pri_cat = "ali_ptr_copy"

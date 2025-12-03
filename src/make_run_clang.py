@@ -60,7 +60,7 @@ def read_json_file(filename):
 def init_clang_script(output_file):
         output_file.write(textwrap.dedent(
         """\
-        #!/bin/sh
+        #!/bin/bash
 
         ast_out_dir=$1\n
         if [ "$#" -ne 1 ]; then
@@ -73,10 +73,10 @@ def init_clang_script(output_file):
         fi
         ast_out_dir=`realpath $ast_out_dir`
         if [ "$CLANG" == "" ]; then
-            CLANG="/opt/clang/build/bin/clang"
+            CLANG="clang-$CLANG_VER"
         fi;
         if [ "$CLANG_PLUSPLUS" == "" ]; then
-            CLANG_PLUSPLUS="/opt/clang/build/bin/clang++"
+            CLANG_PLUSPLUS="clang++-$CLANG_VER"
         fi;
         """))
 

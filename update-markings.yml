@@ -118,11 +118,11 @@ ExcludeFiles: [
   "src/test/csv_reader.c",
   "src/test/template_lifetimes.input",
   "src/test/template_lifetimes.output",
+  "src/test/juliet/*.txt",
 
   ".DS_Store",
   "requirements.txt",
   "manifest.txt",
-  "README.md",
   ".gitignore",
   ".gitkeep",
   "License.txt",

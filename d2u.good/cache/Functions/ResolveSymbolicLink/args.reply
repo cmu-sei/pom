@@ -1,0 +1,26 @@
+{"args": {
+  "lFN": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "rFN": {
+    "resp": "producer",
+    "start": ["VALID"],
+    "referent": {
+      "resp": "responsible",
+      "start": ["ZOMBIE","NUL"],
+      "end": ["GOOD"],
+      "destructor": "free"
+    }
+  },
+  "ipFlag": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

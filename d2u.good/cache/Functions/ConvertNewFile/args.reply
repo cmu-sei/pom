@@ -1,0 +1,8 @@
+{"args": {
+  "ipInFN":   {"resp": "diligent", "start": ["VALID"]},
+  "ipOutFN":  {"resp": "diligent", "start": ["VALID"]},
+  "ipFlag":   {"resp": "diligent", "start": ["VALID"]},
+  "progname": {"resp": "diligent", "start": ["VALID"]},
+  "Convert":  {"resp": "diligent", "start": ["VALID"]},
+  "ConvertW": {"resp": "diligent", "start": ["VALID"]}
+}}

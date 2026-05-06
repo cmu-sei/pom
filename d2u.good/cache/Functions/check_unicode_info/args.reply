@@ -1,0 +1,24 @@
+{"args": {
+  "InF": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID","NUL"]
+  },
+  "ipFlag": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "bomtype_orig": {
+    "resp": "irresponsible",
+    "mutable": false,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  }
+}}

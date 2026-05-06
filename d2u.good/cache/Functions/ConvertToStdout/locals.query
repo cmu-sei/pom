@@ -1,0 +1,117 @@
+I want you to examine the following C function, and then tell me about each local variable. You can ignore the function arguments. Just report on each pointer variable declared in the function body. You should build a JSON data structure that looks like:
+
+    {"locals": {"local_ptr1": ..., "local_ptr2": ..., ...}}
+
+In particular, for each local variable of pointer type, I want you to indicate (in a field named "resp") whether the variable is *responsible* or *irresponsible*.  For example, if a variable `ptr` is responsible, then your output should include:
+
+    {"ptr": {"resp": "responsible"}}
+
+If trhe pointer should be freed by a function other than free, indicate that as well using the `destructor` label. For example, if a variable `ptr` is responsible and should be destroyed using fclose, then your output should include:
+
+    {"ptr": {"resp": "responsible", "destructor": "fclose"}}
+
+Classify a pointer as *responsible* iff it is responsible for freeing the memory that it points to.  If the program contains a statement like `ptr = malloc(...);`, then the variable `ptr` must be responsible.  Likewise, if the program contains a statement `free(ptr);`, then the variable `ptr` must be responsible.  A responsible pointer may transfer responsibility to another pointer, after which it becomes a zombie.  A responsible pointer cannot acquire a value from an irresponsible pointer. 
+
+Responsibility is a type-qualifier property; it doesn't change over time.  Zombieness is a state property; it does change over time.  You don't need to report anything about zombieness; I mention it just to help you better understand how responsible pointers work.
+
+If an irresponsible pointer has permission for writing to memory, then mark the pointer as *mutable*. For example, if `ptr` is irresponsible and mutable, then say:
+
+    {"ptr": {"resp": "irresponsible",  "mutable": true}}
+
+If `ptr` is irresponsible and immutable, then say:
+
+    {"ptr": {"resp": "irresponsible",  "mutable": false}}
+
+Like responsibility, mutability is a type-qualifier property.  All responsible pointers are mutable, so you don't need to indicate mutability for responsible pointers.  It is invalid for a mutable-pointer variable to acquire a value from an immutable pointer.  For example, if `p1` is mutable and `p2` is immutable, then the statement `p1 = p2;` is invalid.  Furthermore, the result obtained by dereferencing an immutable pointer is always immutable, even if the dereferenced memory location holds a mutable pointer.  For example, if `p1` is mutable, then `p1 = *p3` is invalid if `p3` is immutable`, even if `p3` points to a memory location that holds a mutable pointer.
+
+As an example, if a pointer is passed to the `dest` argument of `memcpy`, then the pointer must be mutable.  We have stricter rules about mutable borrows than about immutable borrows (similar to Rust), so a pointer generally shouldn't be labelled `mutable` unless it needs to be mutable.
+
+Below is the code.
+File common.c:
+```c
+int ConvertToStdout(char *ipInFN, CFlag *ipFlag, const char *progname, // Line 1720
+                   int (*Convert)(FILE*, FILE*, CFlag *, const char *) // Line 1721
+#ifdef D2U_UNICODE
+                 , int (*ConvertW)(FILE*, FILE*, CFlag *, const char *) // Line 1723
+#endif
+                  ) // Line 1725
+{ // Line 1726
+  int RetVal = 0; // Line 1727
+  FILE *InF = NULL; // Line 1728
+  const char *errstr; // Line 1729
+
+  ipFlag->status = 0 ; // Line 1731
+
+  /* Test if input file is a regular file or symbolic link */ // Line 1733
+  if (regfile(ipInFN, 1, ipFlag, progname)) { // Line 1734
+    ipFlag->status |= NO_REGFILE ; // Line 1735
+    /* Not a failure, skipping non-regular input file according spec. */ // Line 1736
+    return -1; // Line 1737
+  } // Line 1738
+
+  /* Test if input file target is a regular file */ // Line 1740
+  if (symbolic_link(ipInFN) && regfile_target(ipInFN, ipFlag,progname)) { // Line 1741
+    ipFlag->status |= INPUT_TARGET_NO_REGFILE ; // Line 1742
+    /* Not a failure, skipping non-regular input file according spec. */ // Line 1743
+    return -1; // Line 1744
+  } // Line 1745
+
+  /* can open in file? */ // Line 1747
+  InF=OpenInFile(ipInFN); // Line 1748
+  if (InF == NULL) { // Line 1749
+    if (ipFlag->verbose) { // Line 1750
+      ipFlag->error = errno; // Line 1751
+      errstr = strerror(errno); // Line 1752
+      D2U_UTF8_FPRINTF(stderr, "%s: %s:", progname, ipInFN); // Line 1753
+      D2U_ANSI_FPRINTF(stderr, " %s\n", errstr); // Line 1754
+    } // Line 1755
+    return -1; // Line 1756
+  } // Line 1757
+
+#if defined(_WIN32) && !defined(__CYGWIN__)
+
+    /* stdin and stdout are by default text streams. We need // Line 1761
+     * to set them to binary mode. Otherwise an LF will // Line 1762
+     * automatically be converted to CR-LF on DOS/Windows. // Line 1763
+     * Erwin */ // Line 1764
+
+    /* POSIX 'setmode' was deprecated by MicroSoft since // Line 1766
+     * Visual C++ 2005. Use ISO C++ conformant '_setmode' instead. */ // Line 1767
+
+    _setmode(_fileno(stdout), _O_BINARY); // Line 1769
+#elif defined(__MSDOS__) || defined(__CYGWIN__) || defined(__OS2__)
+    setmode(fileno(stdout), O_BINARY); // Line 1771
+#endif
+
+  if (!RetVal) // Line 1774
+    if (check_unicode(InF, stdout, ipFlag, ipInFN, progname)) // Line 1775
+      RetVal = -1; // Line 1776
+
+  /* conversion successful? */ // Line 1778
+#ifdef D2U_UNICODE
+  if ((ipFlag->bomtype == FILE_UTF16LE) || (ipFlag->bomtype == FILE_UTF16BE)) { // Line 1780
+    if ((!RetVal) && (ConvertW(InF, stdout, ipFlag, progname))) // Line 1781
+      RetVal = -1; // Line 1782
+    if (ipFlag->status & UNICODE_CONVERSION_ERROR) { // Line 1783
+      if (!ipFlag->error) ipFlag->error = 1; // Line 1784
+      RetVal = -1; // Line 1785
+    } // Line 1786
+  } else { // Line 1787
+    if ((!RetVal) && (Convert(InF, stdout, ipFlag, progname))) // Line 1788
+      RetVal = -1; // Line 1789
+  } // Line 1790
+#else
+  if ((!RetVal) && (Convert(InF, stdout, ipFlag, progname))) // Line 1792
+    RetVal = -1; // Line 1793
+#endif
+
+   /* can close in file? */ // Line 1796
+  if (d2u_fclose(InF, ipInFN, ipFlag, "r", progname) == EOF) // Line 1797
+    RetVal = -1; // Line 1798
+
+  return RetVal; // Line 1800
+} // Line 1801
+
+```
+
+Think hard before giving your final answer.  If possible, your answer should comply with all the rules about `responsible` and `mutable` given above.  If the program is not compliant with the pointer-ownership model specified above, then give your best guess at what the programmer likely intended.

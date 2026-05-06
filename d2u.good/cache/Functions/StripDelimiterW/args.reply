@@ -1,0 +1,7 @@
+{"args": {
+  "ipInF":   {"resp": "diligent", "start": ["VALID"]},
+  "ipOutF":  {"resp": "diligent", "start": ["VALID"]},
+  "ipFlag":  {"resp": "diligent", "start": ["VALID"]},
+  "converted": {"resp": "irresponsible", "mutable": true, "start": ["VALID"], "end": ["VALID"]},
+  "progname": {"resp": "diligent", "start": ["VALID"]}
+}}

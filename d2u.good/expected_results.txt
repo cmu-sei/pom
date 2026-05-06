@@ -1,0 +1,59 @@
+
+<legal></legal>
+
+d2u_strncpy: GOOD
+d2u_fclose: GOOD
+d2u_PrintLastError: GOOD
+d2u_WideCharToMultiByte: GOOD
+d2u_MultiByteToWideChar: GOOD
+d2u_utf8_fprintf: GOOD
+d2u_ansi_fprintf: GOOD
+d2u_rename: GOOD
+d2u_unlink: GOOD
+symbolic_link: GOOD
+regfile: GOOD
+regfile_target: GOOD
+glob_warg: BAD  Preprocessed out, only for Windows
+printBSDLicense: GOOD
+is_dos2unix: GOOD
+PrintUsage: GOOD
+PrintVersion: GOOD
+OpenInFile: GOOD
+OpenOutFile: GOOD
+OpenOutFiled: GOOD
+dirname: GOOD  Preprocessed out, only for Windows
+basename: GOOD  Preprocessed out, only for Windows
+d2u_mktemp: GOOD  Preprocessed out, only for Windows
+MakeTempFileFrom: BAD
+ResolveSymbolicLink: BAD
+read_bom: GOOD
+write_bom: GOOD
+print_bom: GOOD
+print_bom_info: GOOD
+check_unicode_info: GOOD
+check_unicode: GOOD
+ConvertNewFile: BAD
+ConvertToStdout: GOOD
+ConvertStdio: GOOD
+print_messages_stdio: GOOD
+print_format: GOOD
+print_messages: GOOD
+print_messages_info: GOOD
+printInfo: GOOD
+FileInfo: GOOD# FileInfoW is similar
+GetFileInfo: GOOD
+GetFileInfoStdio: GOOD
+get_info_options: GOOD
+parse_options: GOOD
+d2u_getc_error: GOOD
+d2u_putc_error: GOOD
+d2u_putwc_error: GOOD
+d2u_getwc: GOOD
+d2u_ungetwc: GOOD
+d2u_putwc: GOOD
+StripDelimiter: GOOD
+ConvertDosToUnix: GOOD
+main: BAD (memory leaks)
+query_con_codepage: GOOD
+AddExtraDOSNewLine: GOOD # AddExtraDOSNewLineW is similar
+ConvertUnixToDos: GOOD # ConvertUnixToDosW is similar

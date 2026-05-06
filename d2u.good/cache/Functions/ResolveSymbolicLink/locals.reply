@@ -1,0 +1,5 @@
+{"locals":{
+  "errstr": {"resp":"irresponsible", "mutable":false},
+  "targetFN": {"resp":"responsible"},
+  "rVal": {"resp":"irresponsible", "mutable":true}
+}}

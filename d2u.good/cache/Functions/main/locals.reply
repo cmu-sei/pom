@@ -1,0 +1,21 @@
+{"locals": {
+  "pFlag": {
+    "resp": "responsible"
+  },
+  "ptr": {
+    "resp": "irresponsible",
+    "mutable": false
+  },
+  "argv_new": {
+    "resp": "irresponsible",
+    "mutable": false
+  },
+  "wargv": {
+    "resp": "responsible",
+    "destructor": "LocalFree"
+  },
+  "argv_glob": {
+    "resp": "responsible",
+    "destructor": "free"
+  }
+}}

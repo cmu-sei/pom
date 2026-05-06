@@ -1,0 +1,28 @@
+{"args": {
+  "InF": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID", "NUL"]
+  },
+  "TempF": {
+    "resp": "irresponsible",
+    "mutable": false,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "ipFlag": {
+    "resp": "irresponsible",
+    "mutable": false,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "ipInFN": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

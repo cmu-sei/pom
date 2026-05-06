@@ -1,0 +1,76 @@
+FILE *read_bom (FILE *f, int *bomtype) // Line 1110
+{ // Line 1111
+  /* BOMs // Line 1112
+   * UTF16-LE  ff fe // Line 1113
+   * UTF16-BE  fe ff // Line 1114
+   * UTF-8     ef bb bf // Line 1115
+   * GB18030   84 31 95 33 // Line 1116
+   */ // Line 1117
+
+  *bomtype = FILE_MBS; // Line 1119
+
+   /* Check for BOM */ // Line 1121
+   if  (f != NULL) { // Line 1122
+      int bom[4]; // Line 1123
+      if ((bom[0] = fgetc(f)) == EOF) { // Line 1124
+         if (ferror(f)) { // Line 1125
+           return NULL; // Line 1126
+         } // Line 1127
+         *bomtype = FILE_MBS; // Line 1128
+         return(f); // Line 1129
+      } // Line 1130
+      if ((bom[0] != 0xff) && (bom[0] != 0xfe) && (bom[0] != 0xef) && (bom[0] != 0x84)) { // Line 1131
+         if (ungetc(bom[0], f) == EOF) return NULL; // Line 1132
+         *bomtype = FILE_MBS; // Line 1133
+         return(f); // Line 1134
+      } // Line 1135
+      if ((bom[1] = fgetc(f)) == EOF) { // Line 1136
+         if (ferror(f)) { // Line 1137
+           return NULL; // Line 1138
+         } // Line 1139
+         if (ungetc(bom[1], f) == EOF) return NULL; // Line 1140
+         if (ungetc(bom[0], f) == EOF) return NULL; // Line 1141
+         *bomtype = FILE_MBS; // Line 1142
+         return(f); // Line 1143
+      } // Line 1144
+      if ((bom[0] == 0xff) && (bom[1] == 0xfe)) { /* UTF16-LE */ // Line 1145
+         *bomtype = FILE_UTF16LE; // Line 1146
+         return(f); // Line 1147
+      } // Line 1148
+      if ((bom[0] == 0xfe) && (bom[1] == 0xff)) { /* UTF16-BE */ // Line 1149
+         *bomtype = FILE_UTF16BE; // Line 1150
+         return(f); // Line 1151
+      } // Line 1152
+      if ((bom[2] = fgetc(f)) == EOF) { // Line 1153
+         if (ferror(f)) { // Line 1154
+           return NULL; // Line 1155
+         } // Line 1156
+         if (ungetc(bom[2], f) == EOF) return NULL; // Line 1157
+         if (ungetc(bom[1], f) == EOF) return NULL; // Line 1158
+         if (ungetc(bom[0], f) == EOF) return NULL; // Line 1159
+         *bomtype = FILE_MBS; // Line 1160
+         return(f); // Line 1161
+      } // Line 1162
+      if ((bom[0] == 0xef) && (bom[1] == 0xbb) && (bom[2]== 0xbf)) { /* UTF-8 */ // Line 1163
+         *bomtype = FILE_UTF8; // Line 1164
+         return(f); // Line 1165
+      } // Line 1166
+      if ((bom[0] == 0x84) && (bom[1] == 0x31) && (bom[2]== 0x95)) { // Line 1167
+         bom[3] = fgetc(f); // Line 1168
+           if (ferror(f)) { // Line 1169
+             return NULL; // Line 1170
+          } // Line 1171
+         if (bom[3]== 0x33) { /* GB18030 */ // Line 1172
+           *bomtype = FILE_GB18030; // Line 1173
+           return(f); // Line 1174
+         } // Line 1175
+         if (ungetc(bom[3], f) == EOF) return NULL; // Line 1176
+      } // Line 1177
+      if (ungetc(bom[2], f) == EOF) return NULL; // Line 1178
+      if (ungetc(bom[1], f) == EOF) return NULL; // Line 1179
+      if (ungetc(bom[0], f) == EOF) return NULL; // Line 1180
+      *bomtype = FILE_MBS; // Line 1181
+      return(f); // Line 1182
+   } // Line 1183
+  return(f); // Line 1184
+} // Line 1185

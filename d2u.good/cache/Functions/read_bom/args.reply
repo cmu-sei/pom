@@ -1,0 +1,14 @@
+{"args": {
+  "f": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["NUL", "VALID"],
+    "end": ["NUL", "VALID"]
+  },
+  "bomtype": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  }
+}}

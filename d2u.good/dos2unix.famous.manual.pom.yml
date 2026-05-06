@@ -1,0 +1,473 @@
+# <legal></legal>
+
+
+Functions:
+
+  # ISO C
+
+  exit:
+    args: {}
+    return: {}
+    signature: void exit(int status)
+  fclose:
+    args:
+      stream:
+        arg_idx: 0
+        destructor: fclose
+        end:
+        - ZOMBIE
+        resp: responsible
+        start:
+        - VALID
+    return: {}
+    signature: int fclose(FILE *stream)
+  ferror:
+    args:
+      stream:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int ferror(FILE *stream)
+  fgetc:
+    args:
+      stream:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int fgetc(FILE *stream)
+  fprintf:
+    args:
+      format:
+        arg_idx: 1
+        resp: diligent
+      stream:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int fprintf(FILE *stream, const char *format, ...)
+  fputc:
+    args:
+      stream:
+        arg_idx: 1
+        resp: diligent
+    return: {}
+    signature: int fputc(int c, FILE *stream)
+  free:
+    args:
+      ptr:
+        arg_idx: 0
+        end:
+        - NUL
+        - ZOMBIE
+        resp: responsible
+        start:
+        - NUL
+        - GOOD
+    return: {}
+    signature: void free(void *ptr)
+  getenv:
+    args:
+      name:
+        arg_idx: 0
+        resp: diligent
+    return:
+      lifetime: [static]
+      resp: irresponsible
+      start:
+      - NUL
+      - VALID
+    signature: char *getenv(const char *name)
+  malloc:
+    args: {}
+    return:
+      destructor: free
+      resp: responsible
+      start:
+      - NUL
+      - GOOD
+    signature: void *malloc(size_t size)
+  rename:
+    args:
+      newpath:
+        arg_idx: 1
+        resp: diligent
+      oldpath:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int rename(const char *oldpath, const char *newpath);
+  setlocale:
+    args:
+      locale:
+        arg_idx: 1
+        resp: diligent
+        start:
+        - NUL
+        - VALID
+    return:
+      lifetime: [static]
+      resp: irresponsible
+      start:
+      - NUL
+      - VALID
+    signature: char *setlocale(int category, const char *locale)
+  sprintf:
+    args:
+      format:
+        arg_idx: 1
+        resp: diligent
+      str:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int sprintf(char *str, const char *format, ...)
+  strcasecmp:
+    args:
+      s1:
+        arg_idx: 0
+        resp: diligent
+      s2:
+        arg_idx: 1
+        resp: diligent
+    return: {}
+    signature: int strcasecmp(const char *s1, const char *s2)
+  strcmp:
+    args:
+      s1:
+        arg_idx: 0
+        resp: diligent
+      s2:
+        arg_idx: 1
+        resp: diligent
+    return: {}
+    signature: int strcmp(const char *s1, const char *s2)
+  strcpy:
+    args:
+      dest:
+        arg_idx: 0
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      src:
+        arg_idx: 1
+        resp: diligent
+    return:
+      lifetime: [dest]
+      mutable: true_or_false
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *strcpy(char *dest, const char *src)
+  strdup:
+    args:
+      s:
+        arg_idx: 0
+        resp: diligent
+    return:
+      resp: responsible
+      start:
+      - GOOD
+      - NUL
+    signature: char *strdup(const char *s)
+  strlen:
+    args:
+      s:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: size_t strlen(const char *s)
+  strncmp:
+    args:
+      s1:
+        arg_idx: 0
+        resp: diligent
+      s2:
+        arg_idx: 1
+        resp: diligent
+    return: {}
+    signature: int strncmp(const char *s1, const char *s2, size_t n)
+  strncpy:
+    args:
+      dest:
+        arg_idx: 0
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      src:
+        arg_idx: 1
+        resp: diligent
+    return:
+      lifetime: [dest]
+      mutable: true_or_false
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *strncpy(char *dest, const char *src, size_t n)
+  strrchr:
+    args:
+      s:
+        arg_idx: 0
+        resp: diligent
+        mutable: true_or_false
+    return:
+      lifetime: [s]
+      mutable: mut(s)
+      resp: irresponsible
+      start:
+      - NUL
+      - VALID
+    signature: char *strrchr(const char *s, int c)
+  ungetc:
+    args:
+      stream:
+        arg_idx: 1
+        resp: diligent
+    return: {}
+    signature: int ungetc(int c, FILE *stream)
+  wcstombs:
+    args:
+      dest:
+        arg_idx: 1
+        resp: diligent
+        start:
+        - NUL
+        - VALID
+      src:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: size_t wcstombs(char *restrict s, const wchar_t *restrict pwcs, size_t n)
+
+
+  # POSIX
+
+  chmod:
+    args:
+      pathname:
+        arg_idx: 0
+        resp: diligent
+        start:
+        - VALID
+    return: {}
+    signature: int chmod(const char *pathname, mode_t mode)
+  chown:
+    args:
+      pathname:
+        arg_idx: 0
+        resp: diligent
+        start:
+        - VALID
+    return: {}
+    signature: int chown(const char *path, uid_t owner, gid_t group)
+  dirname:
+    args:
+      path:
+        arg_idx: 0
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+    return:
+      lifetime:
+      - path   # dies with either path or at the next call to dirname
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *dirname(char *path)
+  fdopen:
+    args:
+      mode:
+        arg_idx: 1
+        resp: diligent
+    return:
+      destructor: fclose
+      resp: responsible
+      start:
+      - GOOD
+      - NUL
+    signature: FILE *fdopen(int fd, const char *mode)
+  fopen64:
+    args:
+      mode:
+        arg_idx: 1
+        resp: diligent
+      path:
+        arg_idx: 0
+        resp: diligent
+    return:
+      destructor: fclose
+      resp: responsible
+      start:
+      - GOOD
+      - NUL
+    signature: FILE *fopen64(const char *path, const char *mode)
+  lstat64:
+    args:
+      path:
+        arg_idx: 0
+        resp: diligent
+      statbuf:
+        arg_idx: 1
+        resp: diligent
+    return: {}
+    signature: int lstat64(const char *pathname, struct stat64 *statbuf)
+  mkstemp64:
+    args:
+      template:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int mkstemp64(char *template)
+  nl_langinfo:
+    args: {}
+    return:
+      lifetime: [static]  # may be overwritten the next time nl_langinfo is called
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *nl_langinfo(nl_item item)
+  realpath:
+    args:
+      path:
+        arg_idx: 0
+        resp: diligent
+      resolved_path:
+        arg_idx: 1
+        resp: irresponsible
+        mutable: true
+        start:
+        - VALID
+        - NUL
+    return:
+      resp: responsible  # if resolved_path is not NULL, returns resolved_path instead
+      start:
+      - NUL
+      - VALID
+    signature: char *realpath(const char *restrict path, char *restrict resolved_path)
+  stat64:
+    args:
+      buf:
+        arg_idx: 1
+        resp: diligent
+      path:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int stat64(const char *path, struct stat64 *buf)
+  strerror:
+    args: {}
+    return:
+      lifetime: [static]
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *strerror(int errnum)
+  umask:
+    args: {}
+    return: {}
+    signature: mode_t umask(mode_t mask)
+  unlink:
+    args:
+      pathname:
+        arg_idx: 0
+        resp: diligent
+    return: {}
+    signature: int unlink(const char *pathname)
+  utime:
+    args:
+      path:
+        arg_idx: 0
+        resp: diligent
+      times:
+        arg_idx: 1
+        resp: diligent
+        start:
+        - NUL
+        - VALID
+    return: {}
+    signature: int utime(const char *filename, const struct utimbuf *times)
+
+
+  # gettext
+
+  bindtextdomain:
+    args:
+      dirname:
+        arg_idx: 1
+        resp: diligent
+        start:
+        - NUL
+        - VALID
+      domainname:
+        arg_idx: 0
+        resp: diligent
+        start:
+        - VALID
+    return:
+      lifetime:
+      - static   # really ends at next call to bindtextdomain
+      resp: irresponsible
+      start:
+      - NUL
+      - VALID
+    signature: char *bindtextdomain(const char *domainname, const char *dirname)
+  gettext:
+    args:
+      msgid:
+        arg_idx: 0
+        resp: diligent
+    return:
+      lifetime: [static]  # except if translation doesn't exist, in which case it returns msgid
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *gettext(const char *msgid)
+  textdomain:
+    args:
+      domainname:
+        arg_idx: 0
+        resp: diligent
+        start:
+        - NUL
+        - VALID
+    return:
+      lifetime: [static]  # really ends at next call to textdomain
+      resp: irresponsible
+      start:
+      - VALID
+    signature: char *textdomain(const char *domainname)
+
+
+  # misc
+
+  canonicalize_file_name:
+    args:
+      name:
+        arg_idx: 0
+        resp: diligent
+        start:
+        - VALID
+    return:
+      destructor: free
+      resp: responsible
+      start:
+      - GOOD
+      - NUL
+    signature: char *canonicalize_file_name(const char *filename)
+  __errno_location:
+    args: {}
+    return:
+      lifetime:
+      - static
+      resp: irresponsible
+      start:
+      - VALID
+    signature: int *__errno_location(void)

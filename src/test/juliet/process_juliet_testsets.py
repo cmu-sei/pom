@@ -94,7 +94,6 @@ def collect_test_cases_from_file_list(list_of_juliet_files):
 def run_testcase_half(testcase_name, testcase_files, config, script_dir, unsat_core=False):
     """Run a single half (GOOD or BAD) of a test case."""
     global cmdline_args
-    testcase_files = [os.path.join(cmdline_args.testcases_dir, x) for x in testcase_files]
     cmd = [os.path.join(script_dir, "run_juliet_test_half.sh")]
     cmd.extend(sorted(testcase_files))
     cmd.append(config)
@@ -225,6 +224,7 @@ def main():
             sys.exit(1)
 
         testcase_files = testcase_to_files[the_testcase]
+        testcase_files = [os.path.join(cmdline_args.testcases_dir, x) for x in testcase_files]
 
         # Skip if any file is .cpp
         if any(f.endswith('.cpp') for f in testcase_files):
@@ -282,6 +282,7 @@ def main():
                     sys.stderr.write(f"Error: Testcase '{testcase_name}' not found\n")
                     continue
                 testcase_files = testcase_to_files[testcase_name]
+                testcase_files = [os.path.join(cmdline_args.testcases_dir, x) for x in testcase_files]
 
                 if testcase_name == args.start_at:
                     hit_start = True
@@ -308,6 +309,8 @@ def main():
                 if not os.path.exists(sorted(testcase_files)[0]):
                     for err_out in [sys.stderr] + ([error_log_file] if error_log_file else []):
                         err_out.write(f"Skipping test case '{testcase_name}' because it contains a file that does not exist.\n")
+                    if error_log_file:
+                        error_log_file.write(f"Missing file: " + repr(sorted(testcase_files)[0]) + "\n")
                     continue
 
                 sys.stderr.write(f"[{processed + 1}] Processing {testcase_name}...\n")

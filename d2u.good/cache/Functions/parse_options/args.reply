@@ -1,0 +1,34 @@
+{"args": {
+  "argv": {
+    "resp": "diligent",
+    "start": ["VALID"],
+    "referent": {
+      "resp": "diligent",
+      "start": ["VALID"]
+    }
+  },
+  "pFlag": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "localedir": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "PrintLicense": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "Convert": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "ConvertW": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

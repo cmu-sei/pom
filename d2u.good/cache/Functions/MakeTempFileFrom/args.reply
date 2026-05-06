@@ -1,0 +1,16 @@
+{"args": {
+  "OutFN": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "fname_ret": {
+    "resp": "producer",
+    "start": ["VALID"],
+    "referent": {
+      "resp": "responsible",
+      "destructor": "free",
+      "start": ["NUL"],
+      "end": ["GOOD", "NUL"]
+    }
+  }
+}}

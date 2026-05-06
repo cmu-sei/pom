@@ -113,7 +113,7 @@ TEST_LL=$OUT_DIR/test_linked.raw.ll
 
 # Run the analysis
 export HAVE_WHOLE_PROG="true"
-if [ "$FUNC" != "" ]; then
+if [ "$FUNC" == "" ]; then
     LLVM_OPTS="-whole-prog $LLVM_OPTS" FUNC="__all_funcs" /host/src/constraint_gen/run.sh $TEST_LL $OUT_DIR $SOL_JSON_ARG > /dev/null
 else
     /host/src/constraint_gen/run.sh $TEST_LL $OUT_DIR $SOL_JSON_ARG > /dev/null
@@ -122,7 +122,11 @@ actual_result=$(head -n 1 $OUT_DIR/solution.txt)
 
 # Generate UNSAT core if requested
 if [ "$unsat_core_flag" == "--unsat-core" ]; then
-    LLVM_OPTS="-whole-prog $LLVM_OPTS" FUNC="__all_funcs" /host/src/constraint_gen/get_unsat_core.sh $TEST_LL -o $OUT_DIR --collapse-flow
+    if [ "$FUNC" == "" ]; then
+        LLVM_OPTS="-whole-prog $LLVM_OPTS" FUNC="__all_funcs" /host/src/constraint_gen/get_unsat_core.sh $TEST_LL -o $OUT_DIR --collapse-flow
+    else
+        FUNC="$FUNC" /host/src/constraint_gen/get_unsat_core.sh $TEST_LL -o $OUT_DIR --collapse-flow
+    fi
 fi
 
 # Determine pass/fail

@@ -50,7 +50,7 @@ def parse_predicate_line(line):
         return None
     
     # Match patterns like: responsible(path), !mut(path), good(path, start)
-    match = re.match(r'^(!?)(\w+)\(([^,)]+)(?:,\s*([a-zA-Z0-9_*.\[\]]+))?\)( = ([^#]*))?(#.*)?$', line)
+    match = re.match(r'^(!?)(\w+)\(([^,)]+)(?:,\s*([a-zA-Z0-9_*.\[\]@<>]+))?\)( = ([^#]*))?(#.*)?$', line)
     if not match:
         return None
     
@@ -279,6 +279,8 @@ def convert_props_to_yaml(props_content):
     filtered_lines = []
     for line in lines:
         line = line.strip()
+        if ":@orig" in line:
+            line = line.replace(":arg:", "::args::")
         if line and '::' in line:
             filtered_lines.append(line)
     

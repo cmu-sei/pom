@@ -1,0 +1,94 @@
+I want you to examine the following C function, and then tell me about each function argument that is a pointer.  You should build a JSON data structure that looks like:
+
+{"args": {"ptr_arg1": ..., "ptr_arg2": ..., ...}}
+
+In particular, for each function argument of pointer type, I want you to indicate (in a field named "resp") that pointer's responsibility, which will be one of four terms: irresponsible, responsible, diligent, or producer. For example, if a variable `ptr` is responsible, then your output should include:
+
+{"ptr": {"resp": "responsible"}}
+
+The types of responsibility are defined as follows:
+
+ * A pointer is *producer* iff it obeys the following:
+ 
+   * It references another pointer, which we'll call the inner pointer.
+   * The producer pointer must be constant, that is, the function may not assign it to point elsewhere.
+   * The producer pointer may not be freed or consumed
+   
+If a pointer is a producer, then treat its referent (that is, the pointer it refers to) as an argument, and provide the same analysis for its argument. That is, its argument could be diligent, responsible, or irresponsible, and provide the same analysis for the referent. For example, if ptr is a producer to a responsible pointer that could start off as a ZOMBIE but ends up GOOD, then say:
+
+{"ptr": {"resp": "producer", "referent": {"resp": "responsible",  "start": ["ZOMBIE"], "end": ["GOOD"]}}}
+
+Responsibility is a type-qualifier property; it doesn't change over time.  Zombieness is a state property; it does change over time, and you should report if a pointer argument is a ZOMBIE when the function starts or ends.
+
+ * A pointer is *diligent* iff it obeys the following:
+ 
+   * They always point to valid memory or NULL and are never assigned to point somewhere else.
+   * The memory they point to is never freed or consumed.
+   * Their value never escapes the function...they are never assigned to another pointer.
+
+The diligent pointer's pointed-to value may be changed, but never freed.
+
+Diligent pointers each have a start state, which is a set of the states the pointer may be in when the function is invoked. The state is either VALID or [NUL, VALID] depending on whether the pointer may or may not be NULL.  For example, if "ptr" is diligent and may be VALID or NULL, then say:
+
+{"ptr": {"resp": "diligent", "start": ["NUL", "VALID"]}}
+
+ * A pointer is *irresponsible* iff its value is never freed or consumed, but might be assigned to point to something else. If the pointer's referenced data could be changed via the pointer, mark the pointer as mutable.  These pointers each have a start state, which is the set of states the pointer may be in when the function is first invoked, and an end state, which is the set of states of the pointer when the function returns. These states can be NUL, VALID, or INVALID.  For example, if "ptr" starts off VALID and might becomes VALID or INVALID when the function is done, this means it is inherently mutable, then say:
+
+{"ptr": {"resp": "irresponsible", "mutable": true,  "start": ["VALID"],  "end": ["INVALID", "VALID"]}}
+
+Like responsibility, mutability is a type-qualifier property.  All responsible pointers are mutable, so you don't need to indicate mutability for responsible pointers.  It is invalid for a mutable-pointer variable to acquire a value from an immutable pointer.  For example, if `p1` is mutable and `p2` is immutable, then the statement `p1 = p2;` is invalid.  Furthermore, the result obtained by dereferencing an immutable pointer is always immutable, even if the dereferenced memory location holds a mutable pointer.  For example, if `p1` is mutable, then `p1 = *p3` is invalid if `p3` is immutable`, even if `p3` points to a memory location that holds a mutable pointer.
+
+As an example, if a pointer is passed to the `dest` argument of `memcpy`, then the pointer must be mutable.  We have stricter rules about mutable borrows than about immutable borrows (similar to Rust), so a pointer generally shouldn't be labelled `mutable` unless it needs to be mutable.
+
+ * A pointer is *responsible* iff the pointer points to memory on the heap, and it is either freed or assigned to a larger object that will free the object when it is itself freed. Don't worry about whether or not the pointer is mutable.  These pointers' start states and end states can be noted. Unlike irresponsible pointer, the states of responsible pointers are NUL, GOOD, or ZOMBIE.  A responsible pointer becomes a ZOMBIE when its pointed-to object is freed.  If trhe pointer should be freed by a function other than free, indicate that as well using the `destructor` label.  For example, if "ptr" is responsible, starts off GOOD and becomes a ZOMBIE when the function is done, and should be passed by fclose() instead of free(), then say:
+
+{"ptr": {"resp": "responsible",  "start": ["GOOD"], "end": ["ZOMBIE"], "destructor": "fclose"}}
+
+
+Below is the code.
+File common.c:
+```c
+int check_unicode_info(FILE *InF, CFlag *ipFlag, const char *progname, int *bomtype_orig) // Line 1321
+{ // Line 1322
+#ifdef D2U_UNICODE
+  if (ipFlag->verbose > 1) { // Line 1324
+    if (ipFlag->ConvMode == CONVMODE_UTF16LE) { // Line 1325
+      D2U_UTF8_FPRINTF(stderr, "%s: ", progname); // Line 1326
+      D2U_UTF8_FPRINTF(stderr, _("Assuming UTF-16LE encoding.\n") ); // Line 1327
+    } // Line 1328
+    if (ipFlag->ConvMode == CONVMODE_UTF16BE) { // Line 1329
+      D2U_UTF8_FPRINTF(stderr, "%s: ", progname); // Line 1330
+      D2U_UTF8_FPRINTF(stderr, _("Assuming UTF-16BE encoding.\n") ); // Line 1331
+    } // Line 1332
+  } // Line 1333
+#endif
+  if ((InF = read_bom(InF, &ipFlag->bomtype)) == NULL) { // Line 1335
+    d2u_getc_error(ipFlag,progname); // Line 1336
+    return -1; // Line 1337
+  } // Line 1338
+  *bomtype_orig = ipFlag->bomtype; // Line 1339
+#ifdef D2U_UNICODE
+  if ((ipFlag->bomtype == FILE_MBS) && (ipFlag->ConvMode == CONVMODE_UTF16LE)) // Line 1341
+    ipFlag->bomtype = FILE_UTF16LE; // Line 1342
+  if ((ipFlag->bomtype == FILE_MBS) && (ipFlag->ConvMode == CONVMODE_UTF16BE)) // Line 1343
+    ipFlag->bomtype = FILE_UTF16BE; // Line 1344
+
+
+#if !defined(_WIN32) && !defined(__CYGWIN__) /* Not Windows or Cygwin */
+  if (!ipFlag->keep_utf16 && ((ipFlag->bomtype == FILE_UTF16LE) || (ipFlag->bomtype == FILE_UTF16BE))) { // Line 1348
+    if (sizeof(wchar_t) < 4) { // Line 1349
+      /* A decoded UTF-16 surrogate pair must fit in a wchar_t */ // Line 1350
+      ipFlag->status |= WCHAR_T_TOO_SMALL ; // Line 1351
+      if (!ipFlag->error) ipFlag->error = 1; // Line 1352
+      return -1; // Line 1353
+    } // Line 1354
+  } // Line 1355
+#endif
+#endif
+
+  return 0; // Line 1359
+} // Line 1360
+
+```
+
+Think hard before giving your final answer.  If possible, your answer should comply with all the rules about `responsible` and `mutable` given above.  If the program is not compliant with the pointer-ownership model specified above, then give your best guess at what the programmer likely intended.

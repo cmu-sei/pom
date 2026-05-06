@@ -49,6 +49,8 @@ A *program point* is a point immediately before or immediately after a given sta
 
 In the absence of structs, unions, and arrays, a *C-path* is a local or global variable with zero or more dereferences.  E.g., if `v` is a variable, then `v`, `*v`, and `**v` are all C-paths.
 
+Note: Properties like `good(p, t)` are written using predicate notation, but they are treated as atomic propositions (boolean variables) for SAT solving.
+
 Note: Initially, we started with C-paths like `**p` (and this is still used in this file) but we switched to `p[0][0]` (which is used in `borrow_design.txt`).  Some parts of the implementation still use the old notation, but there are helper functions that interconvert where necessary.
 
 
@@ -66,33 +68,16 @@ Memory location: A location in memory.  A single memory location may be named by
 
 Location: A memory location, a virtual register, `func_name::return`, or `func_name::args::arg_name`.
 
-Zombie-dereferencing C-path: At time point `t`, given a C-path `p`, if `zombie(p, t)` is true, then any C-path that contains `p[0]` is said to be a *zombie-dereferencing* C-path.
-
-
-## Instruction types
-
-- malloc
-- free
-- load
-- store
-- copy (`__pom_var_store`)
-- call
-- phi
-- nop
-- cmp
-- br
-- return
-
 
 ## Invariants
 
 Our constraints are designed to establish the following invariants:
  - At every program point, for every live memory block M allocated via malloc/calloc/realloc, there is exactly one location that holds a good responsible pointer that points to M.  (Here, the term "location" encompasses both allocated memory locations and LLVM virtual registers.)
  - At every program point, for every memory location M, there is at most one C-path that can be used to write to M.  Such a C-path must be marked `mut` and must have no outstanding borrows.
- - The borrow info is kept accurate and complete for all live non-zombie-dereferencing C-paths.  Specifically:
-   - For every live non-zombie-dereferencing C-path P, we record all live borrows from P.
+ - The borrow info is kept accurate and complete for all live C-paths.  Specifically:
+   - For every live C-path P, we record all live borrows from P.
    - If p2 and p3 both immutably borrow from p1, and subsequently p1 dies, then we DO NOT remember that p2 and p3 are pointer aliases, because remembering this is not necessary for soundness.
- - For pred in {good, null, zombie}: for every live non-zombie-dereferencing C-paths `p`, if the state indicated by pred (i.e., being a good ptr, being a null ptr, being a zombie ptr) actually holds true of `p` on any execution trace at program point `t`, then `pred(p, t)` is constrained to be true.  (Note: we do not have any constraints specifically for preventing the state properties from spuriously becoming true, since this isn't necessary for soundness.)
+ - For pred in {good, null, zombie}: for every live C-path `p`, if the state indicated by pred (i.e., being a good ptr, being a null ptr, being a zombie ptr) actually holds true of `p` on any execution trace at program point `t`, then `pred(p, t)` is constrained to be true.  (Note: we do not have any constraints specifically for preventing the state properties from spuriously becoming true, since this isn't necessary for soundness.)
  - ...
 
 ## Constraint Generation
@@ -263,7 +248,7 @@ Constraints:
     S-post = S-post,
     S-post-dest = "start")` for i in [1, ..., n] if arg[i] is of pointer type
 - `!zombie(act_arg, stmtPre)` for args of pointer type  # Don't pass zombies to functions.
-- `good(*userfunc::formal_param_i, end) -> good(*act_arg_i, S-post)` for i in [1, ..., n] if arg[i] is of pointer type, and ditto for `null` and `zombie` # Function summary indicates how pointed-to object change during the function.
+- `good(*userfunc::formal_param_i, end) -> good(*act_arg_i, S-post)` for i in [1, ..., n] if arg[i] is of pointer type, and ditto for `null` and `zombie`, and ditto for further deref levels, and ditto for aliases. # Function summary indicates how pointed-to object change during the function.
 - If the return value is of pointer type:
     - `responsible(userfunc::return) <-> responsible(t)`
     - If the return value has dependent mutability, then:

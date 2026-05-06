@@ -1,0 +1,10 @@
+{"locals": {
+  "InF": {
+    "resp": "responsible",
+    "destructor": "d2u_fclose"
+  },
+  "errstr": {
+    "resp": "irresponsible",
+    "mutable": false
+  }
+}}

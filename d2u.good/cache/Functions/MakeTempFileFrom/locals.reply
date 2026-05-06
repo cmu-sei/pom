@@ -1,0 +1,19 @@
+{"locals": {
+  "cpy": {
+    "resp": "responsible"
+  },
+  "dir": {
+    "resp": "irresponsible",
+    "mutable": false
+  },
+  "fname_str": {
+    "resp": "responsible"
+  },
+  "fp": {
+    "resp": "responsible",
+    "destructor": "fclose"
+  },
+  "name": {
+    "resp": "responsible"
+  }
+}}

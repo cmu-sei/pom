@@ -1,0 +1,5 @@
+{"args": {
+  "pFlag":   {"resp": "diligent", "start": ["VALID"]},
+  "infile":  {"resp": "diligent", "start": ["VALID"]},
+  "progname":{"resp": "diligent", "start": ["VALID"]}
+}}

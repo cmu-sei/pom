@@ -1,5 +1,27 @@
 //
-// <legal></legal>
+// <legal>
+// Pointer Ownership Model (POM) Source Code Release
+// 
+// Copyright 2025 Carnegie Mellon University.
+// 
+// NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
+// INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
+// UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+// IMPLIED, AS TO ANY MATTER INCLUDING, BUT NOT LIMITED TO, WARRANTY OF
+// FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY, OR RESULTS
+// OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
+// MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
+// TRADEMARK, OR COPYRIGHT INFRINGEMENT.
+// 
+// Licensed under a MIT (SEI)-style license, please see license.txt or
+// contact permission@sei.cmu.edu for full terms.
+// 
+// [DISTRIBUTION STATEMENT A] This material has been approved for public
+// release and unlimited distribution.  Please see Copyright notice for
+// non-US Government use and distribution.
+// 
+// DM25-1262
+// </legal>
 //
 
 #include "llvm/Pass.h"
@@ -110,6 +132,10 @@ bool has_suffix(const std::string& str, const std::string& suffix) {
 }
 std::string strip_suffix(const std::string& s, size_t suffix_len) {
     return s.substr(0, s.length() - suffix_len);
+}
+std::string strip_prefix(const std::string& s, size_t prefix_len) {
+    if (prefix_len > s.length()) {abort();}
+    return s.substr(prefix_len);
 }
 
 struct GEPStructIndex {
@@ -587,7 +613,6 @@ public:
     void reset_at_end_of_func() {
         seenCPaths.clear();
         seen_globals.clear();
-        cpathToValue.clear();
         //instToId.clear();
         valueToSourceName.clear();
         //valueToVarId.clear();
@@ -599,6 +624,7 @@ public:
         curFunc = nullptr;
         firstUseOfCall.clear();
         already_renamed_cur_func_values = false;
+        borrows_at_end_of_bb.clear();
     }
 
     struct PtrCopyArgs {
@@ -684,6 +710,51 @@ public:
         }
 
         cpath_parse_cache.insert({cpath_str, ret});
+
+        return ret;
+    }
+    
+    CPath parse_cpath_ext(const std::string& cpath_str) {
+        // Example input: "foo<0>@orig.fieldA[0]"
+        // Parsed as: {"foo", "<0>", "@orig", ".fieldA", "[0]"}
+        static std::unordered_map<std::string, CPath> cpath_parse_ext_cache;
+        auto it = cpath_parse_ext_cache.find(cpath_str);
+        if (it != cpath_parse_ext_cache.end()) {
+            return it->second;
+        }
+        size_t start = 0;
+        size_t i = 0;
+        size_t len_cpath_str = cpath_str.size();
+        std::vector<CPathPart> ret;
+        int starPfxCount = 0;
+
+        while (i < len_cpath_str) {
+            if (cpath_str[i] == '*') {
+                starPfxCount++;
+            } else {
+                break;
+            }
+            ++i;
+        }
+        start = i;
+        while (true) {
+            if (i == len_cpath_str || cpath_str[i] == '[' || cpath_str[i] == '.' || cpath_str[i] == '<' || cpath_str[i] == '@') {
+                std::string part_str = cpath_str.substr(start, i - start);
+                CPathPart part_id = get_cpath_part_id_from_str(part_str);
+                ret.push_back(part_id);
+                start = i;
+            }
+            if (i == len_cpath_str) {
+                break;
+            }
+            ++i;
+        }
+        assert(get_cpath_part_id_from_str("[0]") == DEREF_PART_ID);
+        for (int j=0; j < starPfxCount; j++) {
+            ret.push_back(DEREF_PART_ID);
+        }
+
+        cpath_parse_ext_cache.insert({cpath_str, ret});
 
         return ret;
     }
@@ -903,7 +974,7 @@ public:
         std::regex pat_mut_arg("^mut[(]([A-Za-z0-9_]+)[)]");
 
         std::regex pattern(
-            "^([!]?)(\\w+)[(]([*]*)([A-Za-z0-9_:.\\[\\]-]+)(, ([A-Za-z0-9_:.*\\[\\]-]+))?[)]( += +([^#]*))?(#.*)?");
+            "^([!]?)(\\w+)[(]([*]*)([A-Za-z0-9_:.\\[\\]-]+)(, ([A-Za-z0-9_:.*<>\\[\\]-]+))?[)]( += +([^#]*))?(#.*)?");
             /*  {neg}{pred}[(]{stars}{     var      }(, {     time      })?[)]( = expr)? */
         while (std::getline(file, line)) {
             line_num++;
@@ -1547,6 +1618,7 @@ public:
         
         for (int i=0; ; i++) {
             hasUpdatedBorrows = false;
+            //errs() << "\nModule iteration " << i << "\n";
             for (Function &F : M) {
                 if (F.isDeclaration()) {
                     continue;
@@ -1848,14 +1920,20 @@ public:
                         }
                     }
                 }
-                std::string starPfx = "*";
-                std::string fakeDerefSfx = "<0>";
+                std::string starPfx = "";
+                std::string fakeDerefSfx = "";
                 for (int i=1; i < ptr_level; i++) {
-                    add_seen_cpath_str(starPfx + argName);
                     arg_dummy_borrows.push_back((Borrow){
-                        .to = parse_cpath(starPfx + argName),
-                        .from = parse_cpath(argName + ":@orig" + fakeDerefSfx)
+                        .to =   parse_cpath("*" + argName + (starPfx.length() > 0 ? "@orig" : "") + fakeDerefSfx),
+                        .from = parse_cpath(argName + "@orig" + fakeDerefSfx + "<0>")
                     });
+                    starPfx += "*";
+                    fakeDerefSfx += "<0>";
+                    //arg_dummy_borrows.push_back((Borrow){
+                    //    .to = parse_cpath(starPfx + argName),
+                    //    .from = parse_cpath(argName + "@orig" + fakeDerefSfx)
+                    //});
+                    add_seen_cpath_str(starPfx + argName);
                     if (!isDryRun) {
                         outFile << "!responsible(" << starPfx << argName << ") | responsible(" << starPfx << func__args__arg << ")\n";
                         outFile << "responsible(" << starPfx << argName << ") | !responsible(" << starPfx << func__args__arg << ")\n";
@@ -1875,14 +1953,12 @@ public:
                             }
                         }
                     }
-                    starPfx += "*";
-                    fakeDerefSfx += "<0>";
                 }
                 // In case the program uses casts to get further levels of indirection,
                 // treat the next level of indirection as starting in a garbage state.
                 {
                     std::string timePt = "start";
-                    outFile << "zombie(" << starPfx << argName << ", " << timePt << ") # Try to flag exceeding declared pointer depth\n";
+                    outFile << "zombie(" << starPfx << "*" << argName << ", " << timePt << ") # Try to flag exceeding declared pointer depth\n";
                 }
             }
             if (pomDepMutRet.count(curFunc->getName().str())) {
@@ -2109,23 +2185,34 @@ public:
                             }
                             //errs() << "\nFunction " << curFunc->getName().str() << ": borrows at exit:\n";
                             //errs() << dump_borrows_to_str(curBI) << "\n";
-                            static std::regex pattern(R"(([A-Za-z0-9_:]+):@orig([A-Za-z0-9_:!+<>]+))");
+                            static std::regex pattern(R"(([A-Za-z0-9_:]+)@orig([A-Za-z0-9_:!+<>]*))");
                             std::vector<Borrow> end_borrows;
+                            std::string func_name = curFunc->getName().str();
+                            //errs() << "Computing end borrows for function " << func_name << "\n";
                             for (const Borrow& borrow : curBI.borrows_by_dest) {
                                 std::smatch matches;
                                 std::string arg;
-                                int deref_count = -1;
                                 std::string src_base = cpath_part_id_to_str[borrow.from[0]];
+                                std::string stripped_src_base = src_base;
+                                if (has_prefix(src_base, func_name + ":arg:")) {
+                                    stripped_src_base = strip_prefix(src_base, (func_name + ":arg:").length());
+                                }
                                 Borrow new_borrow;
-                                if (std::regex_match(src_base, matches, pattern)) {
+                                if (std::regex_match(stripped_src_base, matches, pattern)) {
                                     std::string src_str = cpath_to_str(borrow.from, false);
-                                    src_str = replace_substr(src_str, ":@orig", "");
-                                    src_str = rename_transformed_cpath_back(src_str);
+                                    //src_str = replace_substr(src_str, "@orig", "");
+                                    //src_str = rename_transformed_cpath_back(src_str);
                                     CPath src_cpath = parse_cpath(src_str);
                                     new_borrow = (Borrow){.to = borrow.to, .from = src_cpath};
-                                } else if (argNameSet.count(src_base)) {
+                                } else if (argNameSet.count(stripped_src_base)) {
                                     new_borrow = (Borrow){.to = borrow.to, .from = borrow.from};
+                                } else {
+                                    //errs() << "src_base=" << src_base << "\n";
+                                    //errs() << "skipped borrow: from = " << cpath_to_str(borrow.from) << ", to = " << cpath_to_str(borrow.to) << "\n";
+                                    continue;
                                 }
+                                //errs() << "old borrow: from = " << cpath_to_str(borrow.from) << ", to = " << cpath_to_str(borrow.to) << "\n";
+                                //errs() << "new borrow: from = " << cpath_to_str(new_borrow.from) << ", to = " << cpath_to_str(new_borrow.to) << "\n";
                                 bool too_long = false;
                                 for (CPath new_cpath : {new_borrow.to, new_borrow.from}) {
                                     static bool already_warned = false;
@@ -2143,26 +2230,34 @@ public:
                                 }
                             }
                             //errs() << "\nFunction " << curFunc->getName().str() << ": borrows at exit:\n";
-                            std::string func_name = curFunc->getName().str();
                             auto& pomBorrowsForCurFunc = pomBorrows[func_name];
                             std::string func_name_prefix = func_name + "::";
                             for (const Borrow& borrow : end_borrows) {
+                                //errs() << "end_borrow: from = " << cpath_to_str(borrow.from) << ", to = " << cpath_to_str(borrow.to) << "\n";
                                 if (borrow.from == borrow.to) {continue;}
                                 CPath src = borrow.from;
                                 std::string src_base_var = get_arg_name_of_base_var(cpath_part_id_to_str[src[0]]);
+                                if (src_base_var.length() == 0) {
+                                    //errs() << "get_arg_name_of_base_var(\"" << cpath_part_id_to_str[src[0]] << "\") is empty!\n";
+                                    continue;
+                                }
                                 src[0] = get_cpath_part_id_from_str(src_base_var);
                                 //errs() << "  src = " << cpath_to_str(src) << "\n";
                                 std::string dest_name = replace_substr(cpath_to_str(borrow.to, false), ":arg:", "::args::");
-                                //for (std::string listed_src : pomBorrowsForCurFunc[cpath_to_str(borrow.to)]) {
-                                //    errs() << "  listed source: " << listed_src << "\n";
-                                //}
+                                // //for (std::string listed_src : pomBorrowsForCurFunc[cpath_to_str(borrow.to)]) {
+                                // //    errs() << "  listed source: " << listed_src << "\n";
+                                // //}
                                 if (!has_prefix(dest_name, func_name_prefix)) {
-                                    //errs() << "  Skipping dest " << dest_name << "\n";
+                                    errs() << "  Skipping dest " << dest_name << "\n";
                                     continue;
                                 }
-                                if (dest_name.find(":@orig") != std::string::npos) {
-                                    //errs() << "  Skipping dest " << dest_name << "\n";
+                                if (dest_name.find("@orig") != std::string::npos) {
+                                    errs() << "  Skipping dest " << dest_name << "\n";
                                     continue;
+                                }
+                                if (!gotOne) {
+                                    outFile << "# Function exit point\n";
+                                    gotOne = true;
                                 }
                                 dest_name = cpath_to_str(parse_cpath(dest_name));
                                 outFile << "borrows_from(" << dest_name << ", " << cpath_to_str(src) << ")\n";
@@ -2174,10 +2269,6 @@ public:
                                 //errs() << " ]; adding " << cpath_to_str(src) << "\n";
                                 pomBorrowsForCurFunc[dest_name].insert(cpath_to_str(src));
                                 hasUpdatedBorrows = true;
-                                if (!gotOne) {
-                                    outFile << "# Function exit point\n";
-                                    gotOne = true;
-                                }
                                 if (pomFuncs.count(func_name)) {
                                     pomMissingErrors.push_back("Func " + func_name + ": missing lifetime: " + dest_name + " borrows from " + cpath_to_str(src));
                                 } else if (!WholeProg) {
@@ -2614,6 +2705,8 @@ public:
         formal_param_name_vec.reserve(F->arg_size());
         actual_arg_name_vec.reserve(F->arg_size());
         std::map<std::string, std::string> formal_to_actual;
+        
+        std::string rename_suffix = ":@pre-I" + std::to_string(curInstructionID);
 
         // Process each argument
         for (int i = 0; i < CI.arg_size(); i++) {
@@ -2656,11 +2749,11 @@ public:
             add_seen_cpath_str(act_arg);
             changedCPaths.insert(act_arg);
             
+            // Use PtrCopyConstraints for arguments
+            outFile << "# Copy actual argument to formal argument\n";
             if (!isDryRun) {
                 outFile << "!zombie(" << act_arg << ", " << stmtPre << ") # Don't pass zombies to functions.\n"; /* pri_cat=zombie_arg */
             }
-            
-            // Use PtrCopyConstraints for arguments
             PtrCopyArgs ptrCopyArgs = {
                 .dest = formal_param,
                 .src = act_arg,
@@ -2671,33 +2764,6 @@ public:
             };
             PtrCopyConstraints(ptrCopyArgs);
             
-            // Function summary constraints for pointed-to objects
-            std::string starPfx = "*";
-            int stopDepth = getDeepPtrCopyStopDepth(formal_param, act_arg);
-            bool haveRealStopDepth = (stopDepth != MAX_PTR_DEPTH);
-            while (true) {
-                if (haveRealStopDepth || seenCPaths.count(starPfx + act_arg)) {
-                    if (starPfx.length() > stopDepth) {
-                        if (stopDepth == MAX_PTR_DEPTH) {
-                            errs() << "WARNING: pointer depth is too large, not going any further!\n";
-                        }
-                        break;
-                    }
-                    
-                    add_seen_cpath_str(starPfx + act_arg);
-
-                    // good(*userfunc::formal_param_i, end) -> good(*act_arg_i, S-post) and ditto for null and zombie
-                    if (!isDryRun) {
-                        outFile << "!good(" << starPfx << formal_param << ", end) | good(" << starPfx << act_arg << ", " << stmtPost << ") # Callsite: DeepPtrCopy\n";
-                        outFile << "!null(" << starPfx << formal_param << ", end) | null(" << starPfx << act_arg << ", " << stmtPost << ") # Callsite: DeepPtrCopy\n";
-                        outFile << "!zombie(" << starPfx << formal_param << ", end) | zombie(" << starPfx << act_arg << ", " << stmtPost << ") # Callsite: DeepPtrCopy\n";
-                    }
-
-                    starPfx += "*";
-                } else {
-                    break;
-                }
-            }
         }
 
         if (func_name == "realloc") {
@@ -2747,8 +2813,7 @@ public:
             //}
 
             std::map<CPath, CPath> rename_map;
-            std::string rename_prefix = "pre-I" + std::to_string(curInstructionID) + ":";
-            rename_borrows_before_func_call(arg_set, &rename_map, rename_prefix);
+            rename_borrows_before_func_call(arg_set, &rename_map, rename_suffix);
 
             //errs() << "rename_map: [\n";
             //for (auto const& [old_cpath, new_cpath] : rename_map) {
@@ -2773,7 +2838,7 @@ public:
             }
 
             for (auto const& [dest_formal_cpath_str, src_list] : pomBorrowsForCallee) {
-                CPath dest_cpath = parse_cpath(dest_formal_cpath_str);
+                CPath dest_cpath = parse_cpath_ext(dest_formal_cpath_str);
                 std::string dest_formal_name = get_arg_name_of_base_var(cpath_part_id_to_str[dest_cpath[0]]);
                 std::string dest_actual_name = formal_to_actual[dest_formal_name];
                 if (dest_actual_name.empty()) {
@@ -2781,8 +2846,9 @@ public:
                     continue;
                 }
                 dest_cpath[0] = get_cpath_part_id_from_str(dest_actual_name);
+                dest_cpath = parse_cpath(cpath_to_str(dest_cpath));
                 for (const std::string& src_formal_cpath_str : src_list) {
-                    CPath src_cpath = parse_cpath(src_formal_cpath_str);
+                    CPath src_cpath = parse_cpath_ext(src_formal_cpath_str);
                     std::string src_formal_name = cpath_part_id_to_str[src_cpath[0]];
                     std::string src_actual_name = formal_to_actual[src_formal_name];
                     if (src_actual_name.empty()) {
@@ -2790,7 +2856,8 @@ public:
                         continue;
                     }
                     src_cpath[0] = get_cpath_part_id_from_str(src_actual_name);
-                    src_cpath = rename_cpath_before_func_call(src_cpath, arg_set, &rename_map, rename_prefix);
+                    src_cpath = parse_cpath(cpath_to_str(src_cpath));
+                    src_cpath = rename_cpath_before_func_call(src_cpath, arg_set, &rename_map, rename_suffix);
                     borrowsFromSummary.push_back((Borrow){.to = dest_cpath, .from = src_cpath});
                 }
             }
@@ -2828,6 +2895,56 @@ public:
             check_on_waiting_to_die();
         }
          
+        for (int ixArg = 0; ixArg < formal_param_name_vec.size(); ixArg++) {
+            std::string formal_param_name = formal_param_name_vec[ixArg];
+            std::string formal_param = formal_param_cpath_vec[ixArg];
+            std::string act_arg = actual_arg_name_vec[ixArg];
+            // Function summary constraints for pointed-to objects
+            std::string starPfx = "*";
+            int stopDepth = getDeepPtrCopyStopDepth(formal_param, act_arg);
+            bool haveRealStopDepth = (stopDepth != MAX_PTR_DEPTH);
+            outFile << "# Argument '" << formal_param_name << "': ";
+            outFile << "# Update state properties of memory locations written to by callee\n";
+            while (true) {
+                if (haveRealStopDepth || seenCPaths.count(starPfx + act_arg)) {
+                    if (starPfx.length() > stopDepth) {
+                        if (stopDepth == MAX_PTR_DEPTH) {
+                            errs() << "WARNING: pointer depth is too large, not going any further!\n";
+                        }
+                        break;
+                    }
+                    
+                    add_seen_cpath_str(starPfx + act_arg);
+
+                    // good(*userfunc::formal_param_i, end) -> good(*act_arg_i, S-post) and ditto for null and zombie
+                    if (!isDryRun) {
+                        CPath cpath_formal_end = parse_cpath(starPfx + formal_param);
+                        CPath cpath_actual_end = parse_cpath(starPfx + act_arg);
+                        for (int init_depth = 0; init_depth < starPfx.length(); init_depth++) {
+                            std::string cpath_formal_str = cpath_to_str(rename_cpath_init_k(cpath_formal_end, init_depth, "@orig"));
+                            CPath cpath_actual = rename_cpath_init_k(cpath_actual_end, init_depth, rename_suffix);
+                            std::vector<CPath> dest_loc_aliases;
+                            get_loc_aliases_of_possible_deref(cpath_actual, false, &dest_loc_aliases);
+                            outFile << "# aliases of " << cpath_to_str(cpath_actual) << ": [";
+                            for (CPath ali : dest_loc_aliases) {
+                                outFile << " " << cpath_to_str(ali);
+                            }
+                            outFile << " ]\n";
+                            for (CPath ali : dest_loc_aliases) {
+                                std::string cpath_actual_ali = cpath_to_str(ali);
+                                outFile << "!good(" << cpath_formal_str << ", end) | good(" << cpath_actual_ali << ", " << stmtPost << ") # Callsite: DeepPtrCopy\n";
+                                outFile << "!null(" << cpath_formal_str << ", end) | null(" << cpath_actual_ali << ", " << stmtPost << ") # Callsite: DeepPtrCopy\n";
+                                outFile << "!zombie(" << cpath_formal_str << ", end) | zombie(" << cpath_actual_ali << ", " << stmtPost << ") # Callsite: DeepPtrCopy\n";
+                            }
+                        }
+                    }
+
+                    starPfx += "*";
+                } else {
+                    break;
+                }
+            }
+        }
         
         
         // Handle return value if the function returns a pointer
@@ -2840,6 +2957,7 @@ public:
 
             if (!isDryRun) {
                 // responsible(userfunc::return) <-> responsible(t)
+                outFile << "# Handle return value.\n";
                 outFile << "!responsible(" << returnName << ") | responsible(" << tName << ")\n";
                 outFile << "!responsible(" << tName << ") | responsible(" << returnName << ")\n";
 
@@ -3027,7 +3145,45 @@ public:
         return cpath_str;
     }
 
-    inline CPath rename_cpath_before_func_call(const CPath& orig_cpath, std::set<CPathPart>& arg_names, std::map<CPath, CPath>* rename_map, const std::string& prefix) {
+    inline CPath rename_cpath_init_k(const CPath& orig_cpath, int init_depth, const std::string& suffix) {
+        if (init_depth == 0) {
+            return orig_cpath;
+        }
+        bool has_deref = false;
+        for (CPathPart part : orig_cpath) {
+            if (part == DEREF_PART_ID) {
+                has_deref = true;
+                break;
+            }
+        }
+        if (!has_deref) {
+            errs() << "WARNING: no dereference in cpath " << cpath_to_str(orig_cpath) << "\n";
+            return orig_cpath;
+        }
+        CPath cpath_with_sfx = orig_cpath;
+        std::string old_base_var = cpath_part_id_to_str[orig_cpath[0]];
+        cpath_with_sfx[0] = get_cpath_part_id_from_str(old_base_var + suffix);
+        std::string cpath_str = cpath_to_str(cpath_with_sfx, false);
+        size_t cpath_str_len = cpath_str.length();
+        int num_derefs_changed = 0;
+        for (int i=0; i < cpath_str_len; i++) {
+            char cur_char = cpath_str[i];
+            if (cur_char == '[') {
+                if (num_derefs_changed >= init_depth) {
+                    break;
+                }
+                num_derefs_changed += 1;
+                cpath_str[i] = '<';
+            }
+            else if (cur_char == ']') {cpath_str[i] = '>';}
+            else if (cur_char == '.') {cpath_str[i] = '!';}
+            else if (cur_char == '*') {abort();}
+        }
+        CPath new_cpath = (CPath){parse_cpath(cpath_str)};
+        return new_cpath;
+    }
+
+    inline CPath rename_cpath_before_func_call(const CPath& orig_cpath, std::set<CPathPart>& arg_names, std::map<CPath, CPath>* rename_map, const std::string& suffix) {
         if (arg_names.count(orig_cpath[0]) == 0) {
             return orig_cpath;
         }
@@ -3050,7 +3206,7 @@ public:
         // For each C-path rooted at an argument, we create a dummy variable to hold the original
         // value stored at the C-path location.  We take the original C-path string and replace
         // special characters to ensure that the new C-path is parsed as single variable.
-        // This is similar to what we do with function arguments at function entry (search for ":@orig").
+        // This is similar to what we do with function arguments at function entry (search for "@orig").
         std::string cpath_str = cpath_to_str(orig_cpath, false);
         size_t cpath_str_len = cpath_str.length();
         for (int i=0; i < cpath_str_len; i++) {
@@ -3060,17 +3216,17 @@ public:
             else if (cur_char == '.') {cpath_str[i] = '!';}
             else if (cur_char == '*') {cpath_str[i] = '+';}
         }
-        CPath new_cpath = (CPath){get_cpath_part_id_from_str(prefix + cpath_str)};
+        CPath new_cpath = (CPath){get_cpath_part_id_from_str(cpath_str + suffix)};
         (*rename_map)[orig_cpath] = new_cpath;
         return new_cpath;
     }
 
-    void rename_borrows_before_func_call(std::set<CPathPart>& arg_names, std::map<CPath, CPath>* rename_map, const std::string& prefix) {
+    void rename_borrows_before_func_call(std::set<CPathPart>& arg_names, std::map<CPath, CPath>* rename_map, const std::string& suffix) {
         std::vector<Borrow> del_borrows;
         std::vector<Borrow> add_borrows;
         for (const Borrow& borrow : curBI.borrows_by_src) {
-            CPath new_to   = rename_cpath_before_func_call(borrow.to,   arg_names, rename_map, prefix);
-            CPath new_from = rename_cpath_before_func_call(borrow.from, arg_names, rename_map, prefix);
+            CPath new_to   = rename_cpath_before_func_call(borrow.to,   arg_names, rename_map, suffix);
+            CPath new_from = rename_cpath_before_func_call(borrow.from, arg_names, rename_map, suffix);
             if (new_to != borrow.to || new_from != borrow.from) {
                 del_borrows.push_back(borrow);
                 add_borrows.push_back((Borrow){.to = new_to, .from = new_from});
@@ -3317,6 +3473,7 @@ public:
                 
                 for (const CPath& alias_cpath : aliases) {
                     std::string ali = cpath_to_str(alias_cpath);
+                    add_seen_cpath_str(ali);
                     changedCPaths.insert(ali);
                 }
             }

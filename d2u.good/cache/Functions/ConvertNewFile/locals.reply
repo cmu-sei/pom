@@ -1,0 +1,7 @@
+{"locals": {
+  "InF":        {"resp":"responsible",   "destructor":"d2u_fclose"},
+  "TempF":      {"resp":"responsible",   "destructor":"d2u_fclose"},
+  "TempPath":   {"resp":"responsible",   "destructor":"free"},
+  "TargetFN":   {"resp":"responsible",   "destructor":"free"},
+  "errstr":     {"resp":"irresponsible", "mutable":false}
+}}

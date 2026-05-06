@@ -1,0 +1,46 @@
+I want you to examine the following C function, and then tell me about each local variable. You can ignore the function arguments. Just report on each pointer variable declared in the function body. You should build a JSON data structure that looks like:
+
+    {"locals": {"local_ptr1": ..., "local_ptr2": ..., ...}}
+
+In particular, for each local variable of pointer type, I want you to indicate (in a field named "resp") whether the variable is *responsible* or *irresponsible*.  For example, if a variable `ptr` is responsible, then your output should include:
+
+    {"ptr": {"resp": "responsible"}}
+
+If trhe pointer should be freed by a function other than free, indicate that as well using the `destructor` label. For example, if a variable `ptr` is responsible and should be destroyed using fclose, then your output should include:
+
+    {"ptr": {"resp": "responsible", "destructor": "fclose"}}
+
+Classify a pointer as *responsible* iff it is responsible for freeing the memory that it points to.  If the program contains a statement like `ptr = malloc(...);`, then the variable `ptr` must be responsible.  Likewise, if the program contains a statement `free(ptr);`, then the variable `ptr` must be responsible.  A responsible pointer may transfer responsibility to another pointer, after which it becomes a zombie.  A responsible pointer cannot acquire a value from an irresponsible pointer. 
+
+Responsibility is a type-qualifier property; it doesn't change over time.  Zombieness is a state property; it does change over time.  You don't need to report anything about zombieness; I mention it just to help you better understand how responsible pointers work.
+
+If an irresponsible pointer has permission for writing to memory, then mark the pointer as *mutable*. For example, if `ptr` is irresponsible and mutable, then say:
+
+    {"ptr": {"resp": "irresponsible",  "mutable": true}}
+
+If `ptr` is irresponsible and immutable, then say:
+
+    {"ptr": {"resp": "irresponsible",  "mutable": false}}
+
+Like responsibility, mutability is a type-qualifier property.  All responsible pointers are mutable, so you don't need to indicate mutability for responsible pointers.  It is invalid for a mutable-pointer variable to acquire a value from an immutable pointer.  For example, if `p1` is mutable and `p2` is immutable, then the statement `p1 = p2;` is invalid.  Furthermore, the result obtained by dereferencing an immutable pointer is always immutable, even if the dereferenced memory location holds a mutable pointer.  For example, if `p1` is mutable, then `p1 = *p3` is invalid if `p3` is immutable`, even if `p3` points to a memory location that holds a mutable pointer.
+
+As an example, if a pointer is passed to the `dest` argument of `memcpy`, then the pointer must be mutable.  We have stricter rules about mutable borrows than about immutable borrows (similar to Rust), so a pointer generally shouldn't be labelled `mutable` unless it needs to be mutable.
+
+Below is the code.
+File common.c:
+```c
+void d2u_putwc_error(CFlag *ipFlag, const char *progname) // Line 2766
+{ // Line 2767
+    if (!(ipFlag->status & UNICODE_CONVERSION_ERROR)) { // Line 2768
+      ipFlag->error = errno; // Line 2769
+      if (ipFlag->verbose) { // Line 2770
+        const char *errstr = strerror(errno); // Line 2771
+        D2U_UTF8_FPRINTF(stderr, "%s: ", progname); // Line 2772
+        D2U_ANSI_FPRINTF(stderr, _("can not write to output file: %s\n"), errstr); // Line 2773
+      } // Line 2774
+    } // Line 2775
+} // Line 2776
+
+```
+
+Think hard before giving your final answer.  If possible, your answer should comply with all the rules about `responsible` and `mutable` given above.  If the program is not compliant with the pointer-ownership model specified above, then give your best guess at what the programmer likely intended.

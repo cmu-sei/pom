@@ -1,0 +1,5 @@
+{"args": {
+  "pFlag":     {"resp": "diligent", "start": ["VALID"]},
+  "informat":  {"resp": "diligent", "start": ["VALID"]},
+  "outformat": {"resp": "diligent", "start": ["VALID"]}
+}}

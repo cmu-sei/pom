@@ -93,6 +93,8 @@ ExcludeExtensions: [
   swp,
   bin,
   probe,
+  query,
+  reply,
   ]
 
 
@@ -101,13 +103,13 @@ ExcludeExtensions: [
 # when this was written for python 3.12, recursive wildcard ("**") is treated like the non-recursive wildcard ("*")
 ExcludeFiles: [
   "src/constraint_gen/ghostq/*",
+  "src/constraint_gen/proof-01.tex",
   "design-extracts/*.c",
 
-  "dos2unix.famous.sorted.pom.yml",
-  "dos2unix.sorted.pom.yml",
-
   "src/prompt.*.md",
-  "d2u/famous_functions.txt",
+  "d2u.good/*",
+  "d2u.good/cache/Functions/*/*.c",
+  "d2u.good/cache/*/*.c",
 
   "src/test/__init__.py",
   "src/__init__.py",

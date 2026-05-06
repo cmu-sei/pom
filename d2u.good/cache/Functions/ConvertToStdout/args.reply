@@ -1,0 +1,24 @@
+{"args": {
+  "ipInFN": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "ipFlag": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "Convert": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "ConvertW": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

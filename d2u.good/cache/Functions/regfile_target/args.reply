@@ -1,0 +1,16 @@
+{"args": {
+  "path": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "ipFlag": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

@@ -1,0 +1,12 @@
+{"args": {
+  "dest": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "src": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

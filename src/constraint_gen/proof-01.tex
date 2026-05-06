@@ -1,0 +1,42 @@
+\documentclass{article}
+\usepackage{alltt}
+
+
+\newcommand{\tup}[1]{\langle #1 \rangle}
+\newcommand{\qt}[1]{\textrm{``}#1\textrm{''}}
+
+\newcommand\Backslash{\char`\\}
+\def\ttob{\texttt{\symbol{`\{}}}
+\def\ttcb{\texttt{\symbol{`\}}}}
+\newcommand{\ttc}[1]{\ttob{#1}\ttcb}
+\newcommand{\tts}[1]{\ttt{[}{#1}\ttt{]}}
+
+\def\ttt{\texttt}
+\def\tit{\textit}
+\def\trm{\textrm}
+\def\tbf{\textbf}
+\def\tsf{\textsf}
+\newcommand{\itc}[1]{\textit{\it #1\/}}
+
+\begin{document}
+
+
+\tbf{Instruction types:}
+\begin{itemize}
+\item \verb|t = malloc()|
+\item \verb|free(t)|
+\item \verb|t = load(p)|
+\item \verb|store t, p|
+\item \verb|t_2 = t_1|
+\item \verb|t = call(a_1, ..., a_n)|
+\item \verb|t = phi [v_1, label_1], [v_2, label_2], ..., [v_n, label_n]|
+\item \verb|t = nondet()|
+\item \verb|br label|
+\item \verb|br cond, label_if_true, label_if_false|
+\item \verb|return t|
+\end{itemize}
+
+
+
+
+\end{document}

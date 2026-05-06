@@ -1,0 +1,930 @@
+Functions:
+  ConvertDosToUnix:
+    args:
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInF:
+        resp: diligent
+        start:
+        - VALID
+      ipOutF:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      ConvTable:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  ConvertDosToUnixW:
+    args:
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInF:
+        resp: diligent
+        start:
+        - VALID
+      ipOutF:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  ConvertNewFile:
+    args:
+      Convert:
+        resp: diligent
+        start:
+        - VALID
+      ConvertW:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInFN:
+        resp: diligent
+        start:
+        - VALID
+      ipOutFN:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      InF:
+        destructor: d2u_fclose
+        resp: responsible
+      TargetFN:
+        destructor: free
+        resp: responsible
+      TempF:
+        destructor: d2u_fclose
+        resp: responsible
+      TempPath:
+        destructor: free
+        resp: responsible
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  ConvertStdio:
+    args:
+      Convert:
+        resp: diligent
+        start:
+        - VALID
+      ConvertW:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  ConvertToStdout:
+    args:
+      Convert:
+        resp: diligent
+        start:
+        - VALID
+      ConvertW:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      ipInFN:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      InF:
+        destructor: d2u_fclose
+        resp: responsible
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  FileInfo:
+    args:
+      filename:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInF:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  FileInfoW:
+    args:
+      filename:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInF:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  GetFileInfo:
+    args:
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      ipInFN:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      InF:
+        destructor: d2u_fclose
+        resp: responsible
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  GetFileInfoStdio:
+    args:
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  MakeTempFileFrom:
+    args:
+      OutFN:
+        resp: diligent
+        start:
+        - VALID
+      fname_ret:
+        referent:
+          destructor: free
+          end:
+          - GOOD
+          - NUL
+          resp: responsible
+          start:
+          - NUL
+        resp: producer
+        start:
+        - VALID
+    locals:
+      cpy:
+        resp: responsible
+      dir:
+        mutable: false
+        resp: irresponsible
+      fname_str:
+        resp: responsible
+      fp:
+        destructor: fclose
+        resp: responsible
+      name:
+        resp: responsible
+    return:
+      destructor: fclose
+      resp: responsible
+      start:
+      - NUL
+      - GOOD
+  OpenInFile:
+    args:
+      ipFN:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return:
+      destructor: fclose
+      resp: responsible
+      start:
+      - NUL
+      - GOOD
+  OpenOutFile:
+    args:
+      opFN:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return:
+      destructor: fclose
+      resp: responsible
+      start:
+      - NUL
+      - GOOD
+  OpenOutFiled:
+    args: {}
+    locals: {}
+    return:
+      destructor: fclose
+      resp: responsible
+      start:
+      - NUL
+      - GOOD
+  PrintBSDLicense:
+    args: {}
+    locals: {}
+    return: {}
+  PrintLicense:
+    args: {}
+    locals: {}
+    return: {}
+  PrintUsage:
+    args:
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  PrintVersion:
+    args:
+      localedir:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  ResolveSymbolicLink:
+    args:
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      lFN:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+      rFN:
+        referent:
+          destructor: free
+          end:
+          - GOOD
+          resp: responsible
+          start:
+          - ZOMBIE
+          - NUL
+        resp: producer
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+      rVal:
+        mutable: true
+        resp: irresponsible
+      targetFN:
+        resp: responsible
+    return: {}
+  StripDelimiter:
+    args:
+      converted:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInF:
+        resp: diligent
+        start:
+        - VALID
+      ipOutF:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  StripDelimiterW:
+    args:
+      converted:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      ipInF:
+        resp: diligent
+        start:
+        - VALID
+      ipOutF:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  check_unicode:
+    args:
+      InF:
+        end:
+        - VALID
+        - NUL
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      TempF:
+        end:
+        - VALID
+        mutable: false
+        resp: irresponsible
+        start:
+        - VALID
+      ipFlag:
+        end:
+        - VALID
+        mutable: false
+        resp: irresponsible
+        start:
+        - VALID
+      ipInFN:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  check_unicode_info:
+    args:
+      InF:
+        end:
+        - VALID
+        - NUL
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      bomtype_orig:
+        end:
+        - VALID
+        mutable: false
+        resp: irresponsible
+        start:
+        - VALID
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  d2u_fclose:
+    args:
+      filename:
+        resp: diligent
+        start:
+        - VALID
+      fp:
+        destructor: fclose
+        end:
+        - ZOMBIE
+        resp: responsible
+        start:
+        - GOOD
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      m:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  d2u_getc_error:
+    args:
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  d2u_getwc:
+    args:
+      f:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  d2u_putc_error:
+    args:
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  d2u_putwc:
+    args:
+      f:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  d2u_putwc_error:
+    args:
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  d2u_rename:
+    args:
+      newname:
+        resp: diligent
+        start:
+        - VALID
+      oldname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  d2u_strncpy:
+    args:
+      dest:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      src:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return:
+      lifetime:
+      - dest
+      mutable: true
+      resp: irresponsible
+      start:
+      - VALID
+  d2u_ungetwc:
+    args:
+      f:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  d2u_unlink:
+    args:
+      filename:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  get_info_options:
+    args:
+      option:
+        resp: diligent
+        start:
+        - VALID
+      pFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      ptr:
+        mutable: true
+        resp: irresponsible
+    return: {}
+  is_dos2unix:
+    args:
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  main:
+    args:
+      argv:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      argv_glob:
+        destructor: free
+        resp: responsible
+      argv_new:
+        mutable: false
+        resp: irresponsible
+      pFlag:
+        resp: responsible
+      ptr:
+        mutable: false
+        resp: irresponsible
+      wargv:
+        destructor: LocalFree
+        resp: responsible
+    return: {}
+  parse_options:
+    args:
+      Convert:
+        resp: diligent
+        start:
+        - VALID
+      ConvertW:
+        resp: diligent
+        start:
+        - VALID
+      PrintLicense:
+        resp: diligent
+        start:
+        - VALID
+      argv:
+        referent:
+          resp: diligent
+          start:
+          - VALID
+        resp: diligent
+        start:
+        - VALID
+      localedir:
+        resp: diligent
+        start:
+        - VALID
+      pFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  printInfo:
+    args:
+      filename:
+        resp: diligent
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      ptr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  print_bom:
+    args:
+      filename:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  print_bom_info:
+    args: {}
+    locals: {}
+    return: {}
+  print_format:
+    args:
+      informat:
+        resp: diligent
+        start:
+        - VALID
+      outformat:
+        resp: diligent
+        start:
+        - VALID
+      pFlag:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  print_messages:
+    args:
+      infile:
+        resp: diligent
+        start:
+        - VALID
+      outfile:
+        resp: diligent
+        start:
+        - NUL
+        - VALID
+      pFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  print_messages_info:
+    args:
+      infile:
+        resp: diligent
+        start:
+        - VALID
+      pFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  print_messages_stdio:
+    args:
+      pFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  query_con_codepage:
+    args: {}
+    locals: {}
+    return: {}
+  read_bom:
+    args:
+      bomtype:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      f:
+        end:
+        - NUL
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - NUL
+        - VALID
+    locals: {}
+    return:
+      lifetime:
+      - f
+      mutable: false
+      resp: irresponsible
+      start:
+      - NUL
+      - VALID
+  regfile:
+    args:
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      path:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  regfile_target:
+    args:
+      ipFlag:
+        end:
+        - VALID
+        mutable: true
+        resp: irresponsible
+        start:
+        - VALID
+      path:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals:
+      errstr:
+        mutable: false
+        resp: irresponsible
+    return: {}
+  symbolic_link:
+    args:
+      path:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return: {}
+  write_bom:
+    args:
+      f:
+        end:
+        - VALID
+        mutable: false
+        resp: irresponsible
+        start:
+        - VALID
+      ipFlag:
+        resp: diligent
+        start:
+        - VALID
+      progname:
+        resp: diligent
+        start:
+        - VALID
+    locals: {}
+    return:
+      lifetime:
+      - f
+      mutable: true
+      resp: irresponsible
+      start:
+      - NUL
+      - VALID

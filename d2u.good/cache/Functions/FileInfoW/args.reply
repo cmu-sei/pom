@@ -1,0 +1,6 @@
+{"args": {
+  "ipInF":     {"resp": "diligent", "start": ["VALID"]},
+  "ipFlag":    {"resp": "diligent", "start": ["VALID"]},
+  "filename":  {"resp": "diligent", "start": ["VALID"]},
+  "progname":  {"resp": "diligent", "start": ["VALID"]}
+}}

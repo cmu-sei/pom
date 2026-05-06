@@ -1,0 +1,16 @@
+{"args": {
+  "f": {
+    "resp": "irresponsible",
+    "mutable": false,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "ipFlag": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

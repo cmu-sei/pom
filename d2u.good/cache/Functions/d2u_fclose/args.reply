@@ -1,0 +1,26 @@
+{"args": {
+  "fp": {
+    "resp": "responsible",
+    "start": ["GOOD"],
+    "end": ["ZOMBIE"],
+    "destructor": "fclose"
+  },
+  "filename": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "ipFlag": {
+    "resp": "irresponsible",
+    "mutable": true,
+    "start": ["VALID"],
+    "end": ["VALID"]
+  },
+  "m": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

@@ -1,0 +1,10 @@
+{"args": {
+  "progname": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  },
+  "localedir": {
+    "resp": "diligent",
+    "start": ["VALID"]
+  }
+}}

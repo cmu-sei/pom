@@ -244,7 +244,6 @@
 ./llm.md
 ./main-constraints.md
 ./manifest.txt
-./proof-idea-01.txt
 ./release_process.md
 ./requirements.txt
 ./run_tests.sh
@@ -266,8 +265,6 @@
 ./src/constraint_gen/README.sat.solver.md
 ./src/constraint_gen/VarStorePass.cpp
 ./src/constraint_gen/bitvector.h
-./src/constraint_gen/borrow_design_impl.txt
-./src/constraint_gen/borrow_design_paper.txt
 ./src/constraint_gen/compile_to_ll.sh
 ./src/constraint_gen/conv_dimacs.py
 ./src/constraint_gen/do_tests.py
@@ -296,7 +293,6 @@
 ./src/constraint_gen/llvm_pass_list.sh
 ./src/constraint_gen/make_pom_yml.sh
 ./src/constraint_gen/pom_yaml_to_props.py
-./src/constraint_gen/proof-01.tex
 ./src/constraint_gen/props_to_pom_yaml.py
 ./src/constraint_gen/run.sh
 ./src/constraint_gen/split_constraints.py

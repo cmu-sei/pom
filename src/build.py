@@ -5,9 +5,9 @@
 
 # <legal>
 # Pointer Ownership Model (POM) Source Code Release
-# 
+#
 # Copyright 2025 Carnegie Mellon University.
-# 
+#
 # NO WARRANTY. THIS CARNEGIE MELLON UNIVERSITY AND SOFTWARE ENGINEERING
 # INSTITUTE MATERIAL IS FURNISHED ON AN "AS-IS" BASIS. CARNEGIE MELLON
 # UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
@@ -16,14 +16,14 @@
 # OBTAINED FROM USE OF THE MATERIAL. CARNEGIE MELLON UNIVERSITY DOES NOT
 # MAKE ANY WARRANTY OF ANY KIND WITH RESPECT TO FREEDOM FROM PATENT,
 # TRADEMARK, OR COPYRIGHT INFRINGEMENT.
-# 
+#
 # Licensed under a MIT (SEI)-style license, please see license.txt or
 # contact permission@sei.cmu.edu for full terms.
-# 
+#
 # [DISTRIBUTION STATEMENT A] This material has been approved for public
 # release and unlimited distribution.  Please see Copyright notice for
 # non-US Government use and distribution.
-# 
+#
 # DM25-1262
 # </legal>
 
@@ -77,7 +77,7 @@ def validate_pom_file(pom_file_path: str) -> bool:
         return False
     try:
         yamale.validate(POM_SCHEMA, pom_data)
-        logger.info(f"POM file '{pom_file_path}' validated successfully.")
+        logger.info(f"POM file '{pom_file_path}' validated (for syntactic correctness) successfully.")
         return True
     except yamale.YamaleError as e:
         logger.error(f"POM file '{pom_file_path}' failed validation.")
